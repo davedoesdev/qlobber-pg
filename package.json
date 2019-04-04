@@ -1,0 +1,47 @@
+{
+  "name": "qlobber-fsq",
+  "description": "PostgreSQL-based pub-sub and workqueues. Supports AMQP-like wildcard topics.",
+  "version": "0.0.1",
+  "homepage": "https://github.com/davedoesdev/qlobber-pg",
+  "author": {
+    "name": "David Halls",
+    "email": "dave@davedoesdev.com",
+    "url": "http://www.davedoesdev.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/davedoesdev/qlobber-pg.git"
+  },
+  "bugs": {
+    "url": "https://github.com/davedoesdev/qlobber-pg/issues"
+  },
+  "license": "MIT",
+  "main": "index.js",
+  "scripts": {
+    "migrate": "node-pg-migrate",
+    "test": "mocha"
+  },
+  "directories": {
+    "test": "test"
+  },
+  "keywords": [
+    "qlobber",
+    "pubsub",
+    "queue",
+    "routing",
+    "postgres"
+  ],
+  "engines": {
+    "node": ">= 10"
+  },
+  "dependencies": {
+    "async": "^2.6.2",
+    "iferr": "^1.0.2",
+    "node-pg-migrate": "^3.18.1",
+    "pg": "^7.9.0",
+    "qlobber": "^3.1.0"
+  },
+  "devDependencies": {
+    "mocha": "^6.0.2"
+  }
+}
