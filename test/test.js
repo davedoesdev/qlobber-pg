@@ -8,6 +8,7 @@ describe('qlobber-pq', function () {
         qpg = new QlobberPG(Object.assign({
             name: 'test1' 
         }, config));
+        qpg.on('warning', console.error);
         qpg.start(cb);
     });
 

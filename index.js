@@ -5,6 +5,11 @@ const { queue, asyncify } = require('async');
 const iferr = require('iferr');
 const { Qlobber, QlobberDedup } = require('qlobber');
 
+// TODO:
+// Call handlers inc filter
+// Single messages
+// Doc that name will go into SQL
+
 class CollectStream extends Writable {
     constructor() {
         this._chunks = [];
@@ -27,11 +32,11 @@ class QlobberPG extends EventEmitter {
         options = options || {};
         this._name = options.name;
         this._db = options.db;
-        this._single_ttl = options.single_ttl || (60 * 60 * 1000); // 1 hour
-        this._multi_ttl = options.multi_ttl || (60 * 1000); // 1 minute
+        this._single_ttl = options.single_ttl || (60 * 60 * 1000); // 1h
+        this._multi_ttl = options.multi_ttl || (60 * 1000); // 1m
+        this._expire_interval = options.expire_interval || (10 * 1000) // 10s
         this._dodedup = options.dedup === undefined ? true : options.dedup;
         this._topics = new Map();
-        this._queue = queue((task, cb) => task(cb));
 
         const qoptions = Object.assign({
             cache_adds: this._topics
@@ -50,20 +55,33 @@ class QlobberPG extends EventEmitter {
         }
     }
 
+    _expire() {
+        this._queue.push(cb => {
+            this._client.query('DELETE FROM messages WHERE expires <= NOW()', cb);
+        }, err => {
+            this._warning(err);
+            this._expire_timeout = setTimeout(this._expire.bind(this), this._expire_interval);
+        });
+    }
+
+    _message(msg) {
+        const payload = JSON.parse(msg.payload);
+        const handlers = this._matcher.match(payload.topic);
+        console.log(payload, handlers);
+    }
+
     start(cb) {
         if (this._client) {
             return cb();
         }
         this._client = new Client(this._db);
+        this._queue = queue((task, cb) => task(cb));
         this._client.connect(iferr(cb, () => {
-            this._client.on('notification', msg => {
-                const payload = JSON.parse(msg.payload);
-                const handlers = this._matcher.match(payload.topic);
-
-
-                console.log(payload, handlers);
-            });
-            this._client.query('LISTEN new_message', cb);
+            this._client.on('notification', this._message.bind(this));
+            this._client.query('LISTEN new_message', iferr(cb, () => {
+                this._expire();
+                cb();
+            }));
         }));
     }
 
@@ -72,6 +90,10 @@ class QlobberPG extends EventEmitter {
         delete this._client;
         if (!client) {
             return cb();
+        }
+        if (this._expire_timeout) {
+            clearTimeout(this._expire_timeout);
+            delete this._expire_timeout;
         }
         client.end(cb);
     }
@@ -92,8 +114,17 @@ class QlobberPG extends EventEmitter {
 
     _in_transaction(f, cb) {
         this._queue.push(
-            cb2 => this._client.query('BEGIN', cb2),
+            cb => this._client.query('BEGIN', cb),
             iferr(cb, () => f(this._end_transaction(cb))));
+    }
+
+    _update_trigger(cb) {
+        this._in_transaction(cb => {
+            this._queue.unshift(asyncify(async () => {
+                await this._client.query('DROP TRIGGER IF EXISTS ' + this._name + ' ON messages');
+                await this._client.query('CREATE TRIGGER ' + this._name + ' AFTER INSERT ON messages FOR EACH ROW WHEN ((NEW.expires > NOW()) AND (' + Array.from(this._topics.keys()).map(t => "NEW.topic ~ '" + t +"'").join(' OR ') + ')) EXECUTE PROCEDURE new_message()');
+            }), cb);
+        }, cb);
     }
 
     subscribe(topic, handler, options, cb) {
@@ -106,13 +137,7 @@ class QlobberPG extends EventEmitter {
         cb = cb || this._warning.bind(this);
         
         this._matcher.add(topic, handler);
-
-        this._in_transaction(cb => {
-            this._queue.unshift(asyncify(async () => {
-                await this._client.query('DROP TRIGGER IF EXISTS ' + this._name + ' ON messages');
-                await this._client.query('CREATE TRIGGER ' + this._name + ' AFTER INSERT ON messages FOR EACH ROW WHEN ((NEW.expires > NOW()) AND (' + Array.from(this._topics.keys()).map(t => "NEW.topic ~ '" + t +"'").join(' OR ') + ')) EXECUTE PROCEDURE new_message()');
-            }), cb);
-        }, cb);
+        this._update_trigger(cb);
     }
 
     publish(topic, payload, options, cb) {
@@ -136,24 +161,18 @@ class QlobberPG extends EventEmitter {
         const expires = now + (options.ttl || (options.single ? this._single_ttl : this._multi_ttl));
         const single = !!options.single;
 
-        const insert = async data => {
-            try {
-                await this._client.query('INSERT INTO messages(topic, expires, single, data) VALUES($1, $2, $3, $4)', [
-                    topic,
-                    new Date(expires),
-                    single,
-                    data
-                ]);
-            } catch (ex) {
-                return cb.call(this, ex);
-            }
-
-            cb.call(this, null, {
+        const insert = data => {
+            this._queue.push(cb => this._client.query('INSERT INTO messages(topic, expires, single, data) VALUES($1, $2, $3, $4)', [
+                topic,
+                new Date(expires),
+                single,
+                data
+            ], cb), iferr(cb, () => cb.call(this, null, {
                 topic,
                 expires,
                 single,
                 size: data.length
-            });
+            })));
         };
 
         if (Buffer.isBuffer(payload)) {
