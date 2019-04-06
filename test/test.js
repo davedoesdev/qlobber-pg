@@ -157,4 +157,28 @@ describe('qlobber-pq', function () {
             });
         }));
     });
+
+    it('should subscribe to wildcards', function (done) {
+        let count = 0;
+
+        function received() {
+            if (++count === 2) {
+                done();
+            }
+        }
+
+        qpg.subscribe('*', function (data, info) {
+            expect(info.topic).to.equal('foo');
+            expect(data.toString()).to.equal('bar');
+            received();
+        }, iferr(done, () => {
+            qpg.subscribe('#', function (data, info) {
+                expect(info.topic).to.equal('foo');
+                expect(data.toString()).to.equal('bar');
+                received();
+            }, iferr(done, () => {
+                qpg.publish('foo', 'bar', iferr(done, () => {}));
+            }));
+        }));
+    });
 });

@@ -279,12 +279,12 @@ class QlobberPG extends EventEmitter {
             this._handler_queue.kill();
             delete this._handler_queue;
         }
-        const client = this._client;
-        if (!client) {
-            return cb();
+        if (this._client) {
+            const client = this._client;
+            delete this._client;
+            return client.end(cb);
         }
-        delete this._client;
-        client.end(cb);
+        cb();
     }
 
     _end_transaction(cb) {
@@ -307,11 +307,16 @@ class QlobberPG extends EventEmitter {
             iferr(cb, () => f(this._end_transaction(cb))));
     }
 
+    _ltreeify(topic) {
+        return topic.replace(/(^|\.)(\*)($|\.)/, '$1$2{1}$3')
+                    .replace(/(^|\.)#($|\.)/, '$1*$2');
+    }
+        
     _update_trigger(cb) {
         this._in_transaction(cb => {
             this._queue.unshift(asyncify(async () => {
                 await this._client.query('DROP TRIGGER IF EXISTS ' + this._name + ' ON messages');
-                await this._client.query('CREATE TRIGGER ' + this._name + ' AFTER INSERT ON messages FOR EACH ROW WHEN ((NEW.expires > NOW()) AND (' + Array.from(this._topics.keys()).map(t => "NEW.topic ~ '" + t +"'").join(' OR ') + ')) EXECUTE PROCEDURE new_message()');
+                await this._client.query('CREATE TRIGGER ' + this._name + ' AFTER INSERT ON messages FOR EACH ROW WHEN ((NEW.expires > NOW()) AND (' + Array.from(this._topics.keys()).map(t => "(NEW.topic ~ '" + this._ltreeify(t) +"')").join(' OR ') + ')) EXECUTE PROCEDURE new_message()');
             }), cb);
         }, cb);
     }
@@ -324,7 +329,7 @@ class QlobberPG extends EventEmitter {
 
         options = options || {};
         cb = cb || this._warning.bind(this);
-        
+
         this._matcher.add(topic, handler);
         this._update_trigger(cb);
     }
