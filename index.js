@@ -12,6 +12,7 @@ const { Qlobber, QlobberDedup } = require('qlobber');
 
 class CollectStream extends Writable {
     constructor() {
+        super();
         this._chunks = [];
         this._len = 0;
         this.on('finish', () => {

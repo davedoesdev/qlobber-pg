@@ -1,3 +1,4 @@
+const { parallel } = require('async');
 const { QlobberPG } = require('..');
 const { expect } = require('chai');
 const config = require('config');
@@ -80,6 +81,38 @@ describe('qlobber-pq', function () {
             }, iferr(done, () => {
                 qpg.publish('test', JSON.stringify(the_data), iferr(done, () => {}));
             }));
+        }));
+    });
+
+    it('should support more than 10 subscribers', function (done) {
+        const the_data = { foo: 0.435, bar: 'hello' };
+        let counter = 11;
+        let received_data;
+        let a = [];
+
+        function subscribe(cb) {
+            qpg.subscribe('test', (data, info, cb) => {
+                expect(info.topic).to.equal('test');
+                expect(JSON.parse(data)).to.eql(the_data);
+                if (received_data) {
+                    expect(data == received_data).to.be.true;
+                } else {
+                    received_data = data;
+                }
+                if (--counter === 0) {
+                    cb(null, done);
+                } else {
+                    cb();
+                }
+            }, cb);
+        }
+
+        for (let i = counter; i > 0; --i) {
+            a.push(subscribe);
+        }
+
+        parallel(a, iferr(done, () => {
+            qpg.publish('test', JSON.stringify(the_data), iferr(done, () => {}));
         }));
     });
 });
