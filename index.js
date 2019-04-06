@@ -158,6 +158,7 @@ class QlobberPG extends EventEmitter {
 
         let stream;
         let destroyed = false;
+        let delivered_stream = false;
         let hcb;
 
         const ensure_stream = () => {
@@ -209,10 +210,15 @@ class QlobberPG extends EventEmitter {
         for (let handler of handlers) {
             if (handler.accept_stream) {
                 handler.call(this, ensure_stream(), info, hcb);
+                delivered_stream = true;
             } else {
                 wait_for_done.num_handlers = len;
                 handler.call(this, data, info, wait_for_done);
             }
+        }
+
+        if (!delivered_stream) {
+            done();
         }
     }
 

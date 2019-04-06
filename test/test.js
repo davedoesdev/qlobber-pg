@@ -1,6 +1,7 @@
 const { QlobberPG } = require('..');
 const { expect } = require('chai');
 const config = require('config');
+const iferr = require('iferr');
 
 describe('qlobber-pq', function () {
     let qpg;
@@ -20,7 +21,7 @@ describe('qlobber-pq', function () {
     it('should subscribe and publish to a simple topic', function (done) {
         let pub_info;
 
-        qpg.subscribe('foo', function (data, info, cb) {
+        qpg.subscribe('foo', (data, info, cb) => {
             expect(info.topic).to.equal('foo');
             expect(info.single).to.be.false;
             expect(data.toString()).to.equal('bar');
@@ -31,21 +32,54 @@ describe('qlobber-pq', function () {
             expect(info).to.eql(pub_info);
 
             done();
-        }, function (err) {
-            if (err) {
-                done(err);
-            }
-
+        }, iferr(done, () => {
             qpg.publish('foo', 'bar', function (err, info) {
                 if (err) {
                     return done(err);
                 }
-                // topic
-                // expires
-                // single
-                // size
                 pub_info = info;
             });
-        });
+        }));
+    });
+
+    it('should construct received data only once', function (done) {
+        const the_data = { foo: 0.435, bar: 'hello' };
+        let called1 = false;
+        let called2 = false;
+        let received_data;
+
+        qpg.subscribe('test', (data, info, cb) => {
+            expect(info.topic).to.equal('test');
+            expect(JSON.parse(data)).to.eql(the_data);
+            if (received_data) {
+                expect(data === received_data).to.be.true;
+            } else {
+                received_data = data;
+            }
+            called1 = true;
+            if (called1 && called2) {
+                cb(null, done);
+            } else {
+                cb();
+            }
+        }, iferr(done, () => {
+            qpg.subscribe('test', (data, info, cb) => {
+                expect(info.topic).to.equal('test');
+                expect(JSON.parse(data)).to.eql(the_data);
+                if (received_data) {
+                    expect(data === received_data).to.be.true;
+                } else {
+                    received_data = data;
+                }
+                called2 = true;
+                if (called1 && called2) {
+                    cb(null, done);
+                } else {
+                    cb();
+                }
+            }, iferr(done, () => {
+                qpg.publish('test', JSON.stringify(the_data), iferr(done, () => {}));
+            }));
+        }));
     });
 });
