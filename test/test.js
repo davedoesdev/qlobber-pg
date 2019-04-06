@@ -7,17 +7,19 @@ const iferr = require('iferr');
 describe('qlobber-pq', function () {
     let qpg;
 
-    beforeEach(function (cb) {
+    function before_each(cb, options) {
         qpg = new QlobberPG(Object.assign({
             name: 'test1' 
-        }, config));
+        }, config, options));
         qpg.on('warning', console.error);
         qpg.start(cb);
-    });
-
-    afterEach(function (cb) {
+    }
+    beforeEach(before_each);
+    
+    function after_each(cb) {
         qpg.stop(cb);
-    });
+    }
+    afterEach(after_each);
 
     it('should subscribe and publish to a simple topic', function (done) {
         let pub_info;
@@ -113,6 +115,46 @@ describe('qlobber-pq', function () {
 
         parallel(a, iferr(done, () => {
             qpg.publish('test', JSON.stringify(the_data), iferr(done, () => {}));
+        }));
+    });
+
+    it('should support more than 10 subscribers with same handler', function (done) {
+        after_each(iferr(done, () => {
+            before_each(iferr(done, () => {
+                const the_data = { foo: 0.435, bar: 'hello' };
+                let counter = 11;
+                let received_data;
+                let a = [];
+
+                function handler(data, info, cb) {
+                    expect(info.topic).to.equal('test');
+                    expect(JSON.parse(data)).to.eql(the_data);
+                    if (received_data) {
+                        expect(data === received_data).to.be.true;
+                    } else {
+                        received_data = data;
+                    }
+                    if (--counter === 0) {
+                        cb(null, done);
+                    } else {
+                        cb();
+                    }
+                }
+
+                function subscribe(cb) {
+                    qpg.subscribe('test', handler, cb);
+                }
+
+                for (let i = counter; i > 0; --i) {
+                    a.push(subscribe);
+                }
+
+                parallel(a, iferr(done, () => {
+                    qpg.publish('test', JSON.stringify(the_data), iferr(done, () => {}));
+                }));
+            }), {
+                dedup: false
+            });
         }));
     });
 });

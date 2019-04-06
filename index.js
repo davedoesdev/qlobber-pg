@@ -37,17 +37,13 @@ class QlobberPG extends EventEmitter {
         this._multi_ttl = options.multi_ttl || (60 * 1000); // 1m
         this._expire_interval = options.expire_interval || (10 * 1000) // 10s
         this._do_dedup = options.dedup === undefined ? true : options.dedup;
+        this._handler_concurrency = options.handler_concurrency;
+
         this._topics = new Map();
 
         this._filters = options.filter || [];
         if (typeof this._filters[Symbol.iterator] !== 'function') {
             this._filters = [this._filters];
-        }
-
-        if (options.handler_concurrency) {
-            this._handler_queue = queue((task, cb) => {
-                this._call_handlers2(task.handlers, task.info, cb);
-            }, options.handler_concurrency);
         }
 
         const qoptions = Object.assign({
@@ -249,8 +245,16 @@ class QlobberPG extends EventEmitter {
         if (this._client) {
             return cb();
         }
+
         this._client = new Client(this._db);
         this._queue = queue((task, cb) => task(cb));
+
+        if (this._handler_concurrency) {
+            this._handler_queue = queue((task, cb) => {
+                this._call_handlers2(task.handlers, task.info, cb);
+            }, this._handler_concurrency);
+        }
+
         this._client.connect(iferr(cb, () => {
             this._client.on('notification', msg => {
                 process.nextTick(this._message.bind(this), msg);
@@ -263,15 +267,23 @@ class QlobberPG extends EventEmitter {
     }
 
     stop(cb) {
-        const client = this._client;
-        delete this._client;
-        if (!client) {
-            return cb();
-        }
         if (this._expire_timeout) {
             clearTimeout(this._expire_timeout);
             delete this._expire_timeout;
         }
+        if (this._queue) {
+            this._queue.kill();
+            delete this._queue;
+        }
+        if (this._handler_queue) {
+            this._handler_queue.kill();
+            delete this._handler_queue;
+        }
+        const client = this._client;
+        if (!client) {
+            return cb();
+        }
+        delete this._client;
         client.end(cb);
     }
 
