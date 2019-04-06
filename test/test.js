@@ -181,4 +181,58 @@ describe('qlobber-pq', function () {
             }));
         }));
     });
+
+    it('should only call each handler once', function (done) {
+        const handler = function (data, info) {
+            expect(info.topic).to.equal('foo');
+            expect(data.toString()).to.equal('bar');
+            done();
+        }
+
+        qpg.subscribe('*', handler, iferr(done, () => {
+            qpg.subscribe('#', handler, iferr(done, () => {
+                qpg.publish('foo', 'bar', iferr(done, () => {}));    
+            }));        
+        }));
+    });
+
+    it('should be able to disable handler dedup', function (done) {
+        after_each(iferr(done, () => {
+            before_each(iferr(done, () => {
+                let count_multi = 0;
+                let count_single = 0;
+
+                function handler(data, info, cb) {
+                    expect(info.topic).to.equal('foo');
+                    expect(data.toString()).to.equal('bar');
+                    cb(null, err => {
+                        if (info.single) {
+                            ++count_single;
+                        } else {
+                            ++count_multi;
+                        }
+
+                        if ((count_single === 1) && (count_multi === 2)) {
+                            return done(err);
+                        }
+
+                        if ((count_single > 1) || (count_multi > 2)) {
+                            done(new Error('called too many times'));
+                        }
+                    });
+                }
+
+                qpg.subscribe('*', handler, iferr(done, () => {
+                    qpg.subscribe('#', handler, iferr(done, () => {
+                        qpg.publish('foo', 'bar', iferr(done, () => {}));
+                        qpg.publish('foo', 'bar', {
+                            single: true
+                        }, iferr(done, () => {}));
+                    }));
+                }));
+            }), {
+                dedup: false
+            });
+        }));
+    });
 });

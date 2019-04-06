@@ -7,6 +7,10 @@ const { Qlobber, QlobberDedup } = require('qlobber');
 
 // TODO:
 // Single messages
+//   Inc put back (keep trying singles)
+// Unsubscribe
+// Events
+// Existing messages and 'existing' property in info
 // Tests from qlobber-fsq
 // Doc that name will go into SQL
 
@@ -235,9 +239,19 @@ class QlobberPG extends EventEmitter {
 
         this._filter(payload, handlers, (err, ready, handlers) => {
             this._warning(err);
-            if (ready) {
-                this._call_handlers(handlers, payload);
+            if (!ready) {
+                return;
             }
+            if (payload.single) {
+                if (this._do_dedup) {
+                    if (handlers.size > 0) {
+                        handlers = new Set([handlers.values().next().value]);
+                    }
+                } else if (handlers.length > 0) {
+                    handlers = [handlers[0]];
+                }
+            }
+            this._call_handlers(handlers, payload);
         });
     }
 
