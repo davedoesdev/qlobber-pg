@@ -1,4 +1,5 @@
 const { QlobberPG } = require('..');
+const { expect } = require('chai');
 const config = require('config');
 
 describe('qlobber-pq', function () {
@@ -20,8 +21,16 @@ describe('qlobber-pq', function () {
         let pub_info;
 
         qpg.subscribe('foo', function (data, info, cb) {
-            console.log(data, info);
+            expect(info.topic).to.equal('foo');
+            expect(info.single).to.be.false;
+            expect(data.toString()).to.equal('bar');
+            expect(cb.num_handlers).to.equal(1);
 
+            pub_info.id = info.id;
+            pub_info.data = info.data;
+            expect(info).to.eql(pub_info);
+
+            done();
         }, function (err) {
             if (err) {
                 done(err);

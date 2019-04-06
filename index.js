@@ -6,8 +6,8 @@ const iferr = require('iferr');
 const { Qlobber, QlobberDedup } = require('qlobber');
 
 // TODO:
-// Call handlers inc filter
 // Single messages
+// Tests from qlobber-fsq
 // Doc that name will go into SQL
 
 class CollectStream extends Writable {
@@ -35,14 +35,25 @@ class QlobberPG extends EventEmitter {
         this._single_ttl = options.single_ttl || (60 * 60 * 1000); // 1h
         this._multi_ttl = options.multi_ttl || (60 * 1000); // 1m
         this._expire_interval = options.expire_interval || (10 * 1000) // 10s
-        this._dodedup = options.dedup === undefined ? true : options.dedup;
+        this._do_dedup = options.dedup === undefined ? true : options.dedup;
         this._topics = new Map();
+
+        this._filters = options.filter || [];
+        if (typeof this._filters[Symbol.iterator] !== 'function') {
+            this._filters = [this._filters];
+        }
+
+        if (options.handler_concurrency) {
+            this._handler_queue = queue((task, cb) => {
+                this._call_handlers2(task.handlers, task.info, cb);
+            }, options.handler_concurrency);
+        }
 
         const qoptions = Object.assign({
             cache_adds: this._topics
         }, options);
 
-        if (this._dodedup) {
+        if (this._do_dedup) {
             this._matcher = new QlobberDedup(qoptions);
         } else {
             this._matcher = new Qlobber(qoptions);
@@ -50,9 +61,10 @@ class QlobberPG extends EventEmitter {
     }
 
     _warning(err) {
-        if (err) {
-            this.emit('warning', err);
+        if (err && !this.emit('warning', err)) {
+            console.error(err);
         }
+        return err;
     }
 
     _expire() {
@@ -64,10 +76,166 @@ class QlobberPG extends EventEmitter {
         });
     }
 
+    _filter(info, handlers, cb) {
+        const next = i => {
+            return (err, ready, handlers) => {
+                if (handlers) {
+                    if (this._do_dedup) {
+                        if (!(handlers instanceof Set)) {
+                            handlers = new Set(handlers);
+                        }
+                    } else if (!Array.isArray(handlers)) {
+                        handlers = Array.from(handlers);
+                    }
+                }
+
+                if (err || !ready || (i === this._filters.length)) {
+                    return cb(err, ready, handlers);
+                }
+
+                this._filters[i].call(this, info, handlers, next(i + 1));
+            };
+        };
+
+        next(0)(null, true, handlers);
+    }
+
+    _call_handlers2(handlers, info, cb) {
+        cb = cb || this._warning.bind(this);
+
+        let called = false;
+        let done_err = null;
+        let waiting = [];
+        const len = this._do_dedup ? handlers.size : handlers.length;
+
+        const done = err => {
+            this._warning(err);
+
+            const was_waiting = waiting;
+            waiting = [];
+
+            if (was_waiting.length > 0) {
+                process.nextTick(() => {
+                    for (let f of was_waiting) {
+                        f(err);
+                    }
+                });
+            }
+
+            const was_called = called;
+            called = true;
+            done_err = err;
+
+            if (!was_called) {
+                cb();
+            }
+        };
+
+        const wait_for_done = (err, cb) => {
+            this._warning(err);
+
+            if (cb) {
+                if (called) {
+                    cb(done_err);
+                } else {
+                    waiting.push(cb);
+                }
+            }
+        };
+
+        if (len === 0) {
+            return done();
+        }
+
+        let data = info.data;
+        if (data.startsWith('\\x')) {
+            data = data.substr(2);
+        }
+        data = Buffer.from(data, 'hex');
+
+        info.expires = Date.parse(info.expires);
+        info.size = data.length;
+
+        let stream;
+        let destroyed = false;
+        let hcb;
+
+        const ensure_stream = () => {
+            if (stream) {
+                return stream;
+            }
+
+            stream = new PassThrough();
+            stream.end(data);
+            stream.setMaxListeners(0);
+
+            const sdone = () => {
+                if (destroyed) {
+                    return;
+                }
+                destroyed = true;
+                stream.destroy();
+                done();
+            };
+
+            stream.once('end', sdone);
+
+            stream.on('error', err => {
+                this._warning(err);
+                sdone();
+            });
+
+            hcb = (err, cb) => {
+                if (destroyed) {
+                    return wait_for_done(err, cb);
+                }
+
+                destroyed = true;
+                stream.destroy(err);
+
+                if (cb) {
+                    process.nextTick(cb, err);
+                }
+
+                // From Node 10, 'readable' is not emitted after destroyed.
+                // 'end' is emitted though (at least for now); if this
+                // changes then we could emit 'end' here instead.
+                stream.emit('readable');
+                done(err);
+            };
+            hcb.num_handlers = len;
+        };
+
+        for (let handler of handlers) {
+            if (handler.accept_stream) {
+                handler.call(this, ensure_stream(), info, hcb);
+            } else {
+                wait_for_done.num_handlers = len;
+                handler.call(this, data, info, wait_for_done);
+            }
+        }
+    }
+
+    _call_handlers(handlers, info) {
+        if (this._handler_queue) {
+            return this._handler_queue.push({
+                handlers,
+                info
+            });
+        }
+        this._call_handlers2(handlers, info);
+    }
+
     _message(msg) {
         const payload = JSON.parse(msg.payload);
         const handlers = this._matcher.match(payload.topic);
-        console.log(payload, handlers);
+
+        this._filter(payload, handlers, (err, ready, handlers) => {
+            this._warning(err);
+            if (ready) {
+                this._call_handlers(handlers, payload);
+            }
+        });
     }
 
     start(cb) {
@@ -77,7 +245,9 @@ class QlobberPG extends EventEmitter {
         this._client = new Client(this._db);
         this._queue = queue((task, cb) => task(cb));
         this._client.connect(iferr(cb, () => {
-            this._client.on('notification', this._message.bind(this));
+            this._client.on('notification', msg => {
+                process.nextTick(this._message.bind(this), msg);
+            }); 
             this._client.query('LISTEN new_message', iferr(cb, () => {
                 this._expire();
                 cb();
