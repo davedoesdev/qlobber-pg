@@ -267,4 +267,15 @@ describe('qlobber-pq', function () {
             qpg.publish('foo', 'bar', { single: true }, iferr(done, () => {}));
         }));
     });
+
+    it('should guard against calling subscribe callback twice', function (done) {
+        qpg.subscribe('foo', function (data, info, cb) {
+            expect(info.single).to.be.true;
+            cb(null, iferr(done, () => {
+                setTimeout(() => cb(null, done), 1000);
+            }));
+        }, iferr(done, () => {
+            qpg.publish('foo', 'bar', { single: true }, iferr(done, () => {}));
+        }));
+    });
 });
