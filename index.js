@@ -134,7 +134,6 @@ class QlobberPG extends EventEmitter {
 
         const wait_for_done = (err, cb) => {
             this._warning(err);
-
             if (cb) {
                 if (called) {
                     cb(done_err);
@@ -143,84 +142,135 @@ class QlobberPG extends EventEmitter {
                 }
             }
         };
+        wait_for_done.num_handlers = len;
 
         if (len === 0) {
             return done();
         }
 
-        let data = info.data;
-        if (data.startsWith('\\x')) {
-            data = data.substr(2);
-        }
-        data = Buffer.from(data, 'hex');
-
-        info.expires = Date.parse(info.expires);
-        info.size = data.length;
-
-        let stream;
-        let destroyed = false;
-        let delivered_stream = false;
-        let hcb;
-
-        const ensure_stream = () => {
-            if (stream) {
-                return stream;
+        const deliver_message = () => {
+            let data = info.data;
+            if (data.startsWith('\\x')) {
+                data = data.substr(2);
             }
+            data = Buffer.from(data, 'hex');
 
-            stream = new PassThrough();
-            stream.end(data);
-            stream.setMaxListeners(0);
+            info.expires = Date.parse(info.expires);
+            info.size = data.length;
 
-            const sdone = () => {
+            let stream;
+            let destroyed = false;
+            let delivered_stream = false;
+
+            const common_callback = (err, cb) => {
                 if (destroyed) {
+                    wait_for_done(err, cb);
+                    return null;
+                }
+
+                destroyed = true;
+                if (stream) {
+                    stream.destroy(err);
+                }
+
+                return err => {
+                    if (cb) {
+                        process.nextTick(cb, err);
+                    }
+
+                    // From Node 10, 'readable' is not emitted after destroyed.
+                    // 'end' is emitted though (at least for now); if this
+                    // changes then we could emit 'end' here instead.
+                    if (stream) {
+                        stream.emit('readable');
+                    }
+                    done(err);
+                };
+            };
+
+            const multi_callback = (err, cb) => {
+                const cb2 = common_callback(err, cb);
+                if (!cb2) {
                     return;
                 }
-                destroyed = true;
-                stream.destroy();
-                done();
+                cb2();
             };
 
-            stream.once('end', sdone);
-
-            stream.on('error', err => {
-                this._warning(err);
-                sdone();
-            });
-
-            hcb = (err, cb) => {
-                if (destroyed) {
-                    return wait_for_done(err, cb);
+            const single_callback = (err, cb) => {
+                const cb2 = common_callback(err, cb);
+                if (!cb2) {
+                    return;
                 }
-
-                destroyed = true;
-                stream.destroy(err);
-
-                if (cb) {
-                    process.nextTick(cb, err);
-                }
-
-                // From Node 10, 'readable' is not emitted after destroyed.
-                // 'end' is emitted though (at least for now); if this
-                // changes then we could emit 'end' here instead.
-                stream.emit('readable');
-                done(err);
+                this._in_transaction(cb => {
+                    this._queue.unshift(asyncify(async () => {
+                        if (err) {
+                            await this._client.query('DELETE FROM messages WHERE id = $1', [
+                                info.id
+                            ]);
+                        }
+                        await this._client.query('SELECT pg_advisory_unlock($1)', [
+                            info.id
+                        ]);
+                    }), cb);
+                }, cb2);
             };
+
+            const hcb = info.single ? single_callback : multi_callback;
             hcb.num_handlers = len;
+
+            const ensure_stream = () => {
+                if (stream) {
+                    return stream;
+                }
+
+                stream = new PassThrough();
+                stream.end(data);
+                stream.setMaxListeners(0);
+
+                const sdone = () => {
+                    if (destroyed) {
+                        return;
+                    }
+                    destroyed = true;
+                    stream.destroy();
+                    done();
+                };
+
+                stream.once('end', sdone);
+
+                stream.on('error', err => {
+                    this._warning(err);
+                    sdone();
+                });
+            };
+
+            for (let handler of handlers) {
+                if (handler.accept_stream) {
+                    handler.call(this, ensure_stream(), info, hcb);
+                    delivered_stream = true;
+                } else {
+                    handler.call(this, data, info, hcb);
+                }
+            }
+
+            if (!delivered_stream && !info.single) {
+                done();
+            }
         };
 
-        for (let handler of handlers) {
-            if (handler.accept_stream) {
-                handler.call(this, ensure_stream(), info, hcb);
-                delivered_stream = true;
-            } else {
-                wait_for_done.num_handlers = len;
-                handler.call(this, data, info, wait_for_done);
-            }
+        if (!info.single) {
+            return deliver_message();
         }
 
-        if (!delivered_stream) {
+// TODO: after locking we need to see if the entry still exists
+        this._queue.push(cb => this._client.query('SELECT pg_try_advisory_lock($1)', [
+            info.id
+        ], cb), iferr(done, r => {
+            if (r.rows[0].pg_try_advisory_lock) {
+                return deliver_message();
+            }
             done();
-        }
+        }));
     }
 
     _call_handlers(handlers, info) {

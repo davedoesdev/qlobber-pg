@@ -7,12 +7,19 @@ const iferr = require('iferr');
 describe('qlobber-pq', function () {
     let qpg;
 
-    function before_each(cb, options) {
-        qpg = new QlobberPG(Object.assign({
+    function make_qpg(cb, options) {
+        const qpg = new QlobberPG(Object.assign({
             name: 'test1' 
         }, config, options));
         qpg.on('warning', console.error);
-        qpg.start(cb);
+        qpg.start(iferr(cb, () => cb(null, qpg)));
+    }
+
+    function before_each(cb, options) {
+        make_qpg(iferr(cb, the_qpg => {
+            qpg = the_qpg;
+            cb();
+        }), options);
     }
     beforeEach(before_each);
     
@@ -276,6 +283,34 @@ describe('qlobber-pq', function () {
             }));
         }, iferr(done, () => {
             qpg.publish('foo', 'bar', { single: true }, iferr(done, () => {}));
+        }));
+    });
+
+    it('should only give work to one worker', function (done) {
+        this.timeout(5000);
+
+        make_qpg(iferr(done, qpg2 => {
+            let called = false;
+
+            function handler(data, info, cb) {
+                expect(called).to.be.false;
+                called = true;
+
+                expect(info.topic).to.equal('foo');
+                expect(info.single).to.be.true;
+                expect(data.toString()).to.equal('bar');
+
+                setTimeout(() => cb(null, iferr(done, () => qpg2.stop(done))),
+                           2000);
+            }
+
+            parallel([
+                cb => qpg.subscribe('foo', (...args) => handler(...args), cb),
+                cb => qpg.subscribe('foo', (...args) => handler(...args), cb),
+                cb => qpg2.subscribe('foo', (...args) => handler(...args), cb),
+                cb => qpg2.subscribe('foo', (...args) => handler(...args), cb),
+                cb => qpg.publish('foo', 'bar', { single: true }, cb)
+            ]);
         }));
     });
 });
