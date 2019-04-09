@@ -148,7 +148,7 @@ class QlobberPG extends EventEmitter {
             return done();
         }
 
-        const deliver_message = () => {
+        const deliver_message = lock_client => {
             let data = info.data;
             if (data.startsWith('\\x')) {
                 data = data.substr(2);
@@ -210,9 +210,7 @@ class QlobberPG extends EventEmitter {
                                 ]);
                             }
                         } finally {
-                            await this._client.query('SELECT pg_advisory_unlock($1)', [
-                                info.id
-                            ]);
+                            await lock_client.end();
                         }
                     }), cb);
                 }, cb2);
@@ -267,36 +265,40 @@ class QlobberPG extends EventEmitter {
 
         this._in_transaction(cb => {
             this._queue.unshift(asyncify(async () => {
-                let r = await this._client.query('SELECT pg_try_advisory_lock($1)', [
-                    info.id
-                ]);
-                if (!r.rows[0].pg_try_advisory_lock) {
-                    return false;
+                const lock_client = new Client(this._db);
+                let r;
+                try {
+                    await lock_client.connect();
+                    r = await lock_client.query('SELECT pg_try_advisory_lock($1)', [
+                        info.id
+                    ]);
+                } catch (ex) {
+                    await lock_client.end();
+                    throw ex;
                 }
-                let err;
+                if (!r.rows[0].pg_try_advisory_lock) {
+                    await lock_client.end();
+                    return null;
+                }
                 try {
                     r = await this._client.query('SELECT EXISTS(SELECT 1 FROM messages WHERE id = $1)', [
                         info.id
                     ]);
-                    if (r.rows[0].exists) {
-                        return true;
-                    }
                 } catch (ex) {
-                    err = ex;
+                    await lock_client.end();
+                    return null;
                 }
-                await this._client.query('SELECT pg_advisory_unlock($1)', [
-                    info.id
-                ]);
-                if (err) {
-                    throw err;
+                if (r.rows[0].exists) {
+                    return lock_client;
                 }
-                return false;
+                await lock_client.end();
+                return null;
             }), cb);
-        }, iferr(done, r => {
-            if (!r) {
+        }, iferr(done, lock_client => {
+            if (!lock_client) {
                 return done();
             }
-            deliver_message();
+            deliver_message(lock_client);
         }));
     }
 
