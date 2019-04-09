@@ -203,14 +203,17 @@ class QlobberPG extends EventEmitter {
                 }
                 this._in_transaction(cb => {
                     this._queue.unshift(asyncify(async () => {
-                        if (err) {
-                            await this._client.query('DELETE FROM messages WHERE id = $1', [
+                        try {
+                            if (err) {
+                                await this._client.query('DELETE FROM messages WHERE id = $1', [
+                                    info.id
+                                ]);
+                            }
+                        } finally {
+                            await this._client.query('SELECT pg_advisory_unlock($1)', [
                                 info.id
                             ]);
                         }
-                        await this._client.query('SELECT pg_advisory_unlock($1)', [
-                            info.id
-                        ]);
                     }), cb);
                 }, cb2);
             };
@@ -262,14 +265,38 @@ class QlobberPG extends EventEmitter {
             return deliver_message();
         }
 
-// TODO: after locking we need to see if the entry still exists
-        this._queue.push(cb => this._client.query('SELECT pg_try_advisory_lock($1)', [
-            info.id
-        ], cb), iferr(done, r => {
-            if (r.rows[0].pg_try_advisory_lock) {
-                return deliver_message();
+        this._in_transaction(cb => {
+            this._queue.unshift(asyncify(async () => {
+                let r = await this._client.query('SELECT pg_try_advisory_lock($1)', [
+                    info.id
+                ]);
+                if (!r.rows[0].pg_try_advisory_lock) {
+                    return false;
+                }
+                let err;
+                try {
+                    r = await this._client.query('SELECT EXISTS(SELECT 1 FROM messages WHERE id = $1)', [
+                        info.id
+                    ]);
+                    if (r.rows[0].exists) {
+                        return true;
+                    }
+                } catch (ex) {
+                    err = ex;
+                }
+                await this._client.query('SELECT pg_advisory_unlock($1)', [
+                    info.id
+                ]);
+                if (err) {
+                    throw err;
+                }
+                return false;
+            }), cb);
+        }, iferr(done, r => {
+            if (!r) {
+                return done();
             }
-            done();
+            deliver_message();
         }));
     }
 
