@@ -40,6 +40,7 @@ class QlobberPG extends EventEmitter {
         this._single_ttl = options.single_ttl || (60 * 60 * 1000); // 1h
         this._multi_ttl = options.multi_ttl || (60 * 1000); // 1m
         this._expire_interval = options.expire_interval || (10 * 1000) // 10s
+        this._check_interval = options.check_interval || (1 * 1000) // 1s
         this._do_dedup = options.dedup === undefined ? true : options.dedup;
         this._handler_concurrency = options.handler_concurrency;
 
@@ -74,6 +75,22 @@ class QlobberPG extends EventEmitter {
         }, err => {
             this._warning(err);
             this._expire_timeout = setTimeout(this._expire.bind(this), this._expire_interval);
+        });
+    }
+
+    _check() {
+        this._queue.push(cb => {
+            if (this._topics.size === 0) {
+                return cb(null, { rows: [] });
+            }
+            this._client.query('SELECT * FROM messages NEW WHERE (' + this._topics_test() + ' AND NEW.single)', cb);
+        }, (err, r) => {
+            if (!this._warning(err)) {
+                for (let msg of r.rows) {
+                    this._message(msg);
+                }
+            }
+            this._check_timeout = setTimeout(this._check.bind(this), this._check_interval);
         });
     }
 
@@ -150,10 +167,12 @@ class QlobberPG extends EventEmitter {
 
         const deliver_message = lock_client => {
             let data = info.data;
-            if (data.startsWith('\\x')) {
-                data = data.substr(2);
+            if (!Buffer.isBuffer(data)) {
+                if (data.startsWith('\\x')) {
+                    data = data.substr(2);
+                }
+                data = Buffer.from(data, 'hex');
             }
-            data = Buffer.from(data, 'hex');
 
             info.expires = Date.parse(info.expires);
             info.size = data.length;
@@ -171,6 +190,8 @@ class QlobberPG extends EventEmitter {
                 destroyed = true;
                 if (stream) {
                     stream.destroy(err);
+                } else {
+                    this._warning(err);
                 }
 
                 return err => {
@@ -200,6 +221,9 @@ class QlobberPG extends EventEmitter {
                 const cb2 = common_callback(err, cb);
                 if (!cb2) {
                     return;
+                }
+                if (err) {
+                    return lock_client.end(cb2);
                 }
                 this._in_transaction(cb => {
                     this._queue.unshift(asyncify(async () => {
@@ -310,10 +334,8 @@ class QlobberPG extends EventEmitter {
         this._call_handlers2(handlers, info);
     }
 
-    _message(msg) {
-        const payload = JSON.parse(msg.payload);
+    _message(payload) {
         const handlers = this._matcher.match(payload.topic);
-
         this._filter(payload, handlers, (err, ready, handlers) => {
             this._warning(err);
             if (!ready) {
@@ -332,6 +354,10 @@ class QlobberPG extends EventEmitter {
         });
     }
 
+    _json_message(msg) {
+        this._message(JSON.parse(msg.payload));
+    }
+
     start(cb) {
         if (this._client) {
             return cb();
@@ -348,10 +374,11 @@ class QlobberPG extends EventEmitter {
 
         this._client.connect(iferr(cb, () => {
             this._client.on('notification', msg => {
-                process.nextTick(this._message.bind(this), msg);
+                process.nextTick(this._json_message.bind(this), msg);
             }); 
             this._client.query('LISTEN new_message', iferr(cb, () => {
                 this._expire();
+                this._check();
                 cb();
             }));
         }));
@@ -361,6 +388,10 @@ class QlobberPG extends EventEmitter {
         if (this._expire_timeout) {
             clearTimeout(this._expire_timeout);
             delete this._expire_timeout;
+        }
+        if (this._check_timeout) {
+            clearTimeout(this._check_timeout);
+            delete this._check_timeout;
         }
         if (this._queue) {
             this._queue.kill();
@@ -402,12 +433,16 @@ class QlobberPG extends EventEmitter {
         return topic.replace(/(^|\.)(\*)($|\.)/, '$1$2{1}$3')
                     .replace(/(^|\.)#($|\.)/, '$1*$2');
     }
+
+    _topics_test() {
+        return '(NEW.expires > NOW()) AND (' + Array.from(this._topics.keys()).map(t => "(NEW.topic ~ '" + this._ltreeify(t) +"')").join(' OR ') + ')';
+    }
         
     _update_trigger(cb) {
         this._in_transaction(cb => {
             this._queue.unshift(asyncify(async () => {
                 await this._client.query('DROP TRIGGER IF EXISTS ' + this._name + ' ON messages');
-                await this._client.query('CREATE TRIGGER ' + this._name + ' AFTER INSERT ON messages FOR EACH ROW WHEN ((NEW.expires > NOW()) AND (' + Array.from(this._topics.keys()).map(t => "(NEW.topic ~ '" + this._ltreeify(t) +"')").join(' OR ') + ')) EXECUTE PROCEDURE new_message()');
+                await this._client.query('CREATE TRIGGER ' + this._name + ' AFTER INSERT ON messages FOR EACH ROW WHEN (' + this._topics_test() + ') EXECUTE PROCEDURE new_message()');
             }), cb);
         }, cb);
     }

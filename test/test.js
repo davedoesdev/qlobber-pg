@@ -21,7 +21,13 @@ describe('qlobber-pq', function () {
             cb();
         }), options);
     }
-    beforeEach(before_each);
+    beforeEach(cb => {
+        before_each(iferr(cb, () => {
+            qpg._queue.push(cb => {
+                qpg._client.query('DELETE FROM messages', cb);
+            }, cb);
+        }));
+    });
     
     function after_each(cb) {
         qpg.stop(cb);
@@ -311,6 +317,21 @@ describe('qlobber-pq', function () {
                 cb => qpg2.subscribe('foo', (...args) => handler(...args), cb),
                 cb => qpg.publish('foo', 'bar', { single: true }, cb)
             ]);
+        }));
+    });
+
+    it('should put work back on the queue', function (done) {
+        this.timeout(5000);
+
+        let count = 0;
+
+        qpg.subscribe('foo', function (data, info, cb) {
+            if (++count === 1) {
+                return cb('dummy failure');
+            }
+            cb(null, done);
+        }, iferr(done, () => {
+            qpg.publish('foo', 'bar', { single: true }, iferr(done, () => {}));
         }));
     });
 });
