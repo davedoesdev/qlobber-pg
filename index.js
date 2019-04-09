@@ -263,38 +263,36 @@ class QlobberPG extends EventEmitter {
             return deliver_message();
         }
 
-        this._in_transaction(cb => {
-            this._queue.unshift(asyncify(async () => {
-                const lock_client = new Client(this._db);
-                let r;
-                try {
-                    await lock_client.connect();
-                    r = await lock_client.query('SELECT pg_try_advisory_lock($1)', [
-                        info.id
-                    ]);
-                } catch (ex) {
-                    await lock_client.end();
-                    throw ex;
-                }
-                if (!r.rows[0].pg_try_advisory_lock) {
-                    await lock_client.end();
-                    return null;
-                }
-                try {
-                    r = await this._client.query('SELECT EXISTS(SELECT 1 FROM messages WHERE id = $1)', [
-                        info.id
-                    ]);
-                } catch (ex) {
-                    await lock_client.end();
-                    return null;
-                }
-                if (r.rows[0].exists) {
-                    return lock_client;
-                }
+        this._queue.unshift(asyncify(async () => {
+            const lock_client = new Client(this._db);
+            let r;
+            try {
+                await lock_client.connect();
+                r = await lock_client.query('SELECT pg_try_advisory_lock($1)', [
+                    info.id
+                ]);
+            } catch (ex) {
+                await lock_client.end();
+                throw ex;
+            }
+            if (!r.rows[0].pg_try_advisory_lock) {
                 await lock_client.end();
                 return null;
-            }), cb);
-        }, iferr(done, lock_client => {
+            }
+            try {
+                r = await this._client.query('SELECT EXISTS(SELECT 1 FROM messages WHERE id = $1)', [
+                    info.id
+                ]);
+            } catch (ex) {
+                await lock_client.end();
+                return null;
+            }
+            if (r.rows[0].exists) {
+                return lock_client;
+            }
+            await lock_client.end();
+            return null;
+        }), iferr(done, lock_client => {
             if (!lock_client) {
                 return done();
             }
