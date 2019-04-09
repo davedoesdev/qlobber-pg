@@ -334,4 +334,30 @@ describe('qlobber-pq', function () {
             qpg.publish('foo', 'bar', { single: true }, iferr(done, () => {}));
         }));
     });
+
+    it('should allow handlers to refuse work', function (done) {
+        function handler1() {
+            done(new Error('should not be called'));
+        }
+
+        function handler2(data, info, cb) {
+            cb(null, done);
+        }
+
+        after_each(iferr(done, () => {
+            before_each(iferr(done, () => {
+                qpg.subscribe('foo', handler1, iferr(done, () => {
+                    qpg.subscribe('foo', handler2, iferr(done, () => {
+                        qpg.publish('foo', 'bar', iferr(done, () => {}));
+                    }));
+                }));
+            }), {
+                filter: function (info, handlers, cb) {
+                    expect(info.topic).to.equal('foo');
+                    handlers.delete(handler1);
+                    cb(null, true, handlers);
+                }
+            });
+        }));
+    });
 });

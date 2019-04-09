@@ -6,8 +6,7 @@ const iferr = require('iferr');
 const { Qlobber, QlobberDedup } = require('qlobber');
 
 // TODO:
-// Single messages
-//   Inc put back (keep trying singles)
+// Streams
 // Unsubscribe
 // Events
 // Existing messages and 'existing' property in info
@@ -228,7 +227,7 @@ class QlobberPG extends EventEmitter {
                 this._in_transaction(cb => {
                     this._queue.unshift(asyncify(async () => {
                         try {
-                            if (err) {
+                            if (!err) {
                                 await this._client.query('DELETE FROM messages WHERE id = $1', [
                                     info.id
                                 ]);
