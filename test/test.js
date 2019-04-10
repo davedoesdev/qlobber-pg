@@ -12,7 +12,7 @@ describe('qlobber-pq', function () {
             name: 'test1' 
         }, config, options));
         qpg.on('warning', console.error);
-        qpg.start(iferr(cb, () => cb(null, qpg)));
+        qpg.on('start', () => cb(null, qpg));
     }
 
     function before_each(cb, options) {

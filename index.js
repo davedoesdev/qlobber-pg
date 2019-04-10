@@ -41,7 +41,6 @@ class QlobberPG extends EventEmitter {
         this._expire_interval = options.expire_interval || (10 * 1000) // 10s
         this._check_interval = options.check_interval || (1 * 1000) // 1s
         this._do_dedup = options.dedup === undefined ? true : options.dedup;
-        this._handler_concurrency = options.handler_concurrency;
 
         this._topics = new Map();
 
@@ -59,6 +58,34 @@ class QlobberPG extends EventEmitter {
         } else {
             this._matcher = new Qlobber(qoptions);
         }
+
+        this._queue = queue((task, cb) => task(cb));
+
+        if (options.handler_concurrency) {
+            this._handler_queue = queue((task, cb) => {
+                this._call_handlers2(task.handlers, task.info, cb);
+            }, options.handler_concurrency);
+        }
+
+        this.stopped = false;
+        this.active = true;
+
+        const emit_error = err => {
+            this.active = false;
+            this.emit('error', err);
+        };
+
+        this._client = new Client(this._db);
+        this._client.connect(iferr(emit_error, () => {
+            this._client.on('notification', msg => {
+                process.nextTick(this._json_message.bind(this), msg);
+            }); 
+            this._client.query('LISTEN new_message', iferr(emit_error, () => {
+                this._expire();
+                this._check();
+                this.emit('start');
+            }));
+        }));
     }
 
     _warning(err) {
@@ -355,32 +382,6 @@ class QlobberPG extends EventEmitter {
 
     _json_message(msg) {
         this._message(JSON.parse(msg.payload));
-    }
-
-    start(cb) {
-        if (this._client) {
-            return cb();
-        }
-
-        this._client = new Client(this._db);
-        this._queue = queue((task, cb) => task(cb));
-
-        if (this._handler_concurrency) {
-            this._handler_queue = queue((task, cb) => {
-                this._call_handlers2(task.handlers, task.info, cb);
-            }, this._handler_concurrency);
-        }
-
-        this._client.connect(iferr(cb, () => {
-            this._client.on('notification', msg => {
-                process.nextTick(this._json_message.bind(this), msg);
-            }); 
-            this._client.query('LISTEN new_message', iferr(cb, () => {
-                this._expire();
-                this._check();
-                cb();
-            }));
-        }));
     }
 
     stop(cb) {
