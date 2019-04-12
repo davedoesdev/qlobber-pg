@@ -71,21 +71,34 @@ class QlobberPG extends EventEmitter {
         this.active = true;
 
         const emit_error = err => {
-            this.active = false;
             this.emit('error', err);
         };
 
         this._client = new Client(this._db);
         this._client.connect(iferr(emit_error, () => {
-            this._client.on('notification', msg => {
-                process.nextTick(this._json_message.bind(this), msg);
-            }); 
+            if (options.notify !== false) {
+                this._client.on('notification', msg => {
+                    if (this._chkstop()) {
+                        return;
+                    }
+                    process.nextTick(this._json_message.bind(this), msg);
+                });
+            }
             this._client.query('LISTEN new_message', iferr(emit_error, () => {
                 this._expire();
                 this._check();
                 this.emit('start');
             }));
         }));
+    }
+
+    _chkstop() {
+        if (this.stopped && this.active) {
+            this.active = false;
+            this.emit('stop');
+        }
+
+        return this.stopped;
     }
 
     _warning(err) {
@@ -96,21 +109,35 @@ class QlobberPG extends EventEmitter {
     }
 
     _expire() {
+        delete this._expire_timeout;
         this._queue.push(cb => {
+            if (this._chkstop()) {
+                return cb();
+            }
             this._client.query('DELETE FROM messages WHERE expires <= NOW()', cb);
         }, err => {
+            if (this._chkstop()) {
+                return;
+            }
             this._warning(err);
             this._expire_timeout = setTimeout(this._expire.bind(this), this._expire_interval);
         });
     }
 
     _check() {
+        delete this._check_timeout;
         this._queue.push(cb => {
+            if (this._chkstop()) {
+                return cb();
+            }
             if (this._topics.size === 0) {
                 return cb(null, { rows: [] });
             }
             this._client.query('SELECT * FROM messages NEW WHERE (' + this._topics_test() + ' AND NEW.single)', cb);
         }, (err, r) => {
+            if (this._chkstop()) {
+                return;
+            }
             if (!this._warning(err)) {
                 for (let msg of r.rows) {
                     this._message(msg);
@@ -170,7 +197,7 @@ class QlobberPG extends EventEmitter {
             called = true;
             done_err = err;
 
-            if (!was_called) {
+            if (!was_called && !this._chkstop()) {
                 cb();
             }
         };
@@ -186,10 +213,6 @@ class QlobberPG extends EventEmitter {
             }
         };
         wait_for_done.num_handlers = len;
-
-        if (len === 0) {
-            return done();
-        }
 
         const deliver_message = lock_client => {
             let data = info.data;
@@ -254,6 +277,9 @@ class QlobberPG extends EventEmitter {
                 this._in_transaction(cb => {
                     this._queue.unshift(asyncify(async () => {
                         try {
+                            if (this._chkstop()) {
+                                throw new Error('stopped');
+                            }
                             if (!err) {
                                 await this._client.query('DELETE FROM messages WHERE id = $1', [
                                     info.id
@@ -309,11 +335,18 @@ class QlobberPG extends EventEmitter {
             }
         };
 
+        if ((len === 0) || this._chkstop()) {
+            return done();
+        }
+
         if (!info.single) {
             return deliver_message();
         }
 
-        this._queue.unshift(asyncify(async () => {
+        this._queue.push(asyncify(async () => {
+            if (this._chkstop()) {
+                return null;
+            }
             const lock_client = new Client(this._db);
             let r;
             try {
@@ -325,7 +358,7 @@ class QlobberPG extends EventEmitter {
                 await lock_client.end();
                 throw ex;
             }
-            if (!r.rows[0].pg_try_advisory_lock) {
+            if (!r.rows[0].pg_try_advisory_lock || this._chkstop()) {
                 await lock_client.end();
                 return null;
             }
@@ -335,7 +368,7 @@ class QlobberPG extends EventEmitter {
                 ]);
             } catch (ex) {
                 await lock_client.end();
-                return null;
+                throw ex;
             }
             if (r.rows[0].exists) {
                 return lock_client;
@@ -343,7 +376,7 @@ class QlobberPG extends EventEmitter {
             await lock_client.end();
             return null;
         }), iferr(done, lock_client => {
-            if (!lock_client) {
+            if (!lock_client || this._chkstop()) {
                 return done();
             }
             deliver_message(lock_client);
@@ -385,39 +418,63 @@ class QlobberPG extends EventEmitter {
     }
 
     stop(cb) {
-        if (this._expire_timeout) {
-            clearTimeout(this._expire_timeout);
-            delete this._expire_timeout;
+        cb = cb || (err => {
+            if (err) {
+                this.emit('error', err);
+            }
+        });
+
+        this._warning.bind(this);
+
+        if (this.stopped) {
+            return cb.call(this);
         }
-        if (this._check_timeout) {
-            clearTimeout(this._check_timeout);
-            delete this._check_timeout;
-        }
-        if (this._queue) {
-            this._queue.kill();
-            delete this._queue;
-        }
-        if (this._handler_queue) {
-            this._handler_queue.kill();
-            delete this._handler_queue;
-        }
-        if (this._client) {
-            const client = this._client;
-            delete this._client;
-            return client.end(cb);
-        }
-        cb();
+        this.stopped = true;
+
+        this._client.end(err => {
+            this._warning(err);
+
+            if (this._expire_timeout && this._check_timeout) {
+                setImmediate(this._chkstop.bind(this));
+            }
+
+            if (this._expire_timeout) {
+                clearTimeout(this._expire_timeout);
+                delete this._expire_timeout;
+            }
+
+            if (this._check_timeout) {
+                clearTimeout(this._check_timeout);
+                delete this._check_timeout;
+            }
+
+            if (this.active) {
+                return this.once('stop', cb.bind(this, err));
+            }
+
+            cb.call(this, err);
+        });
+    }
+
+    stop_watching(cb) { // qlobber-fsq compatibility
+        stop(cb);
     }
 
     _end_transaction(cb) {
         return (err, ...args) => {
             if (err) {
                 return this._queue.unshift(cb => {
+                    if (this._chkstop()) {
+                        return cb(new Error('stopped'));
+                    }
                     this._client.query('ROLLBACK', cb);
                 }, err2 => cb(err2 || err, ...args));
             }
 
             this._queue.unshift(cb => {
+                if (this._chkstop()) {
+                    return cb(new Error('stopped'));
+                }
                 this._client.query('COMMIT', cb);
             }, err => cb(err, ...args));
         };
@@ -425,7 +482,12 @@ class QlobberPG extends EventEmitter {
 
     _in_transaction(f, cb) {
         this._queue.push(
-            cb => this._client.query('BEGIN', cb),
+            cb => {
+                if (this._chkstop()) {
+                    return cb(new Error('stopped'));
+                }
+                this._client.query('BEGIN', cb);
+            },
             iferr(cb, () => f(this._end_transaction(cb))));
     }
 
@@ -441,6 +503,9 @@ class QlobberPG extends EventEmitter {
     _update_trigger(cb) {
         this._in_transaction(cb => {
             this._queue.unshift(asyncify(async () => {
+                if (this._chkstop()) {
+                    throw new Error('stopped');
+                }
                 await this._client.query('DROP TRIGGER IF EXISTS ' + this._name + ' ON messages');
                 await this._client.query('CREATE TRIGGER ' + this._name + ' AFTER INSERT ON messages FOR EACH ROW WHEN (' + this._topics_test() + ') EXECUTE PROCEDURE new_message()');
             }), cb);
@@ -482,6 +547,9 @@ class QlobberPG extends EventEmitter {
         const single = !!options.single;
 
         const insert = data => {
+            if (this._chkstop()) {
+                return cb(new Error('stopped'));
+            }
             this._queue.push(cb => this._client.query('INSERT INTO messages(topic, expires, single, data) VALUES($1, $2, $3, $4)', [
                 topic,
                 new Date(expires),
