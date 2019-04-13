@@ -44,9 +44,9 @@ class QlobberPG extends EventEmitter {
 
         this._topics = new Map();
 
-        this._filters = options.filter || [];
-        if (typeof this._filters[Symbol.iterator] !== 'function') {
-            this._filters = [this._filters];
+        this.filters = options.filter || [];
+        if (typeof this.filters[Symbol.iterator] !== 'function') {
+            this.filters = [this.filters];
         }
 
         const qoptions = Object.assign({
@@ -160,11 +160,11 @@ class QlobberPG extends EventEmitter {
                     }
                 }
 
-                if (err || !ready || (i === this._filters.length)) {
+                if (err || !ready || (i === this.filters.length)) {
                     return cb(err, ready, handlers);
                 }
 
-                this._filters[i].call(this, info, handlers, next(i + 1));
+                this.filters[i].call(this, info, handlers, next(i + 1));
             };
         };
 

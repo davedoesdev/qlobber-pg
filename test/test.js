@@ -360,4 +360,26 @@ describe('qlobber-pq', function () {
             });
         }));
     });
+
+    it('should be able to set filter by property', function (done) {
+        function handler1() {
+            done(new Error('should not be called'));
+        }
+
+        function handler2(data, info, cb) {
+            cb(null, done);
+        }
+
+        qpg.filters.push(function (info, handlers, cb) {
+            expect(info.topic).to.equal('foo');
+            handlers.delete(handler1);
+            cb(null, true, handlers);
+        });
+
+        qpg.subscribe('foo', handler1, iferr(done, () => {
+            qpg.subscribe('foo', handler2, iferr(done, () => {
+                qpg.publish('foo', 'bar', iferr(done, () => {}));
+            }));
+        }));
+    });
 });
