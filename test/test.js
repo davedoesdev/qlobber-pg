@@ -493,4 +493,31 @@ describe('qlobber-pq', function () {
             qpg.publish('foo', 'bar', iferr(done, () => {}));
         }));
     });
+
+    it('should not call other filters if not ready', function (done) {
+        let called = false;
+
+        qpg.filters.push(
+            function (info, handlers, cb) {
+                expect(info.topic).to.equal('foo');
+                cb(null, false);
+                if (called) {
+                    return done();
+                }
+                called = true;
+            },
+
+            function (info, handlers, cb) {
+                done(new Error('should not be called'));
+            }
+        );
+
+        function handler() {
+            done(new Error('should not be called'));
+        }
+
+        qpg.subscribe('foo', handler, iferr(done, () => {
+            qpg.publish('foo', 'bar', iferr(done, () => {}));
+        }));
+    });
 });
