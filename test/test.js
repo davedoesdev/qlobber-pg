@@ -640,4 +640,42 @@ describe('qlobber-pq', function () {
             qpg2.on('stop', done);
         }));
     });
+
+    it('should support per-message time-to-live', function (done) {
+        qpg.subscribe('foo', function (data, info) {
+            function exists(cb) {
+                qpg._queue.push(cb => qpg._client.query('SELECT EXISTS(SELECT 1 FROM messages WHERE id = $1)', [
+                info.id
+            ], cb), iferr(done, r => cb(r.rows[0].exists)));
+            }
+            exists(b => {
+                expect(b).to.be.true;
+                setTimeout(() => {
+                    qpg.force_refresh();
+                    setTimeout(() => {
+                        exists(b => {
+                            expect(b).to.be.false;
+                            done();
+                        });
+                    }, 500);
+                }, 500);
+            });
+        }, iferr(done, () => {
+            qpg.publish('foo', 'bar', { ttl: 500 }, iferr(done, () => {}));
+        }));
+    });
+
+    it('should call error function', function (done) {
+        qpg.on('warning', function (err) {
+            expect(err).to.equal('dummy failure');
+            done();
+        });
+
+        qpg.subscribe('foo', function (data, info, cb) {
+            cb('dummy failure');
+        }, iferr(done, () => {
+            qpg.publish('foo', 'bar', { single: true }, iferr(done, () => {}));
+        }));
+    });
+
 });

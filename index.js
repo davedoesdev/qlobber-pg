@@ -111,8 +111,27 @@ class QlobberPG extends EventEmitter {
         return err;
     }
 
+    force_refresh() {
+        if (this._expire_timeout) {
+            clearTimeout(this._expire_timeout);
+            delete this._expire_timeout;
+            this._expire();
+        } else {
+            this._expire_delay = 0;
+        }
+
+        if (this._check_timeout) {
+            clearTimeout(this._check_timeout);
+            delete this._check_timeout;
+            this._check();
+        } else {
+            this._check_delay = 0;
+        }
+    }
+
     _expire() {
         delete this._expire_timeout;
+        this._expire_delay = this._expire_interval;
         this._queue.push(cb => {
             if (this._chkstop()) {
                 return cb();
@@ -123,12 +142,13 @@ class QlobberPG extends EventEmitter {
                 return;
             }
             this._warning(err);
-            this._expire_timeout = setTimeout(this._expire.bind(this), this._expire_interval);
+            this._expire_timeout = setTimeout(this._expire.bind(this), this._expire_delay);
         });
     }
 
     _check() {
         delete this._check_timeout;
+        this._check_delay = this._check_interval;
         this._queue.push(cb => {
             if (this._chkstop()) {
                 return cb();
@@ -148,7 +168,7 @@ class QlobberPG extends EventEmitter {
                     this._message(msg);
                 }
             }
-            this._check_timeout = setTimeout(this._check.bind(this), this._check_interval);
+            this._check_timeout = setTimeout(this._check.bind(this), this._check_delay);
         });
     }
 
