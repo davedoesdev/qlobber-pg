@@ -589,4 +589,55 @@ describe('qlobber-pq', function () {
             }));
         }));
     });
+
+    it('should allow handlers to delay a message', function (done) {
+        this.timeout(30000);
+
+        let ready_multi = false;
+        let ready_single = false;
+        let got_multi = false;
+        let got_single = false;
+        let count = 0;
+
+        function handler(data, info, cb) {
+            expect(data.toString()).to.equal('bar');
+            cb(null, err => {
+                if (info.single) {
+                    expect(got_single).to.be.false;
+                    got_single = true;
+                } else {
+                    expect(got_multi).to.be.false;
+                    got_multi = true;
+                }
+                if (got_single && got_multi && ready_single && ready_multi) {
+                    expect(count).to.equal(10);
+                    done(err);
+                }
+            });
+        }
+
+        qpg.filters.push(
+            function (info, handlers, cb) {
+                expect(info.topic).to.equal('foo');
+                if (info.single) {
+                    ready_single = true;
+                } else {
+                    ready_multi = true;
+                }
+                cb(null, (++count % 5) === 0, handlers);
+            }
+        );
+
+        qpg.subscribe('foo', handler, iferr(done, () => {
+            qpg.publish('foo', 'bar', iferr(done, () => {}));
+            qpg.publish('foo', 'bar', { single: true }, iferr(done, () => {}));
+        }));
+    });
+
+    it('should emit stop event', function (done) {
+        make_qpg(iferr(done, qpg2 => {
+            qpg2.stop();
+            qpg2.on('stop', done);
+        }));
+    });
 });
