@@ -11,7 +11,7 @@ const { Qlobber, QlobberDedup } = require('qlobber');
 // Events
 // Existing messages and 'existing' property in info
 // Tests from qlobber-fsq
-// Doc that name will go into SQL
+// Doc that name will go into SQL or escape it
 
 class CollectStream extends Writable {
     constructor() {
@@ -134,7 +134,6 @@ class QlobberPG extends EventEmitter {
                 return cb();
             }
             const test = this._topics_test(true);
-            this._deferred.clear();
             if (!test) {
                 return cb(null, { rows: [] });
             }
@@ -144,6 +143,7 @@ class QlobberPG extends EventEmitter {
                 return;
             }
             if (!this._warning(err)) {
+                this._deferred.clear();
                 for (let msg of r.rows) {
                     this._message(msg);
                 }

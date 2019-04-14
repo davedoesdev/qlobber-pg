@@ -520,4 +520,73 @@ describe('qlobber-pq', function () {
             qpg.publish('foo', 'bar', iferr(done, () => {}));
         }));
     });
+
+    it('should put work back on queue for another handler', function (done) {
+        let filter_called = false;
+
+        function handler(data, info, cb) {
+            cb('dummy failure');
+        }
+
+        qpg.filters.push(
+            function (info, handlers, cb) {
+                expect(info.topic).to.equal('foo');
+                expect(info.single).to.be.true;
+
+                if (filter_called) {
+                    handlers.delete(handler);
+                    return cb(null, true, handlers);
+                }
+
+                filter_called = true;
+                cb(null, true, handlers);
+            }
+        );
+
+        qpg.subscribe('foo', handler, iferr(done, () => {
+            qpg.subscribe('foo', function (data, info, cb) {
+                if (filter_called) {
+                    return cb(null, done);
+                }
+                cb('dummy failure2');
+            }, iferr(done, () => {
+                qpg.publish('foo', 'bar', { single: true }, iferr(done, () => {}));
+            }));
+        }));
+    });
+
+    it('should put work back on queue for a handler on another queue', function (done) {
+        let filter_called = false;
+
+        function handler(data, info, cb) {
+            cb('dummy failure');
+        }
+
+        qpg.filters.push(
+            function (info, handlers, cb) {
+                expect(info.topic).to.equal('foo');
+                expect(info.single).to.be.true;
+
+                if (filter_called) {
+                    handlers.delete(handler);
+                }
+
+                filter_called = true;
+                cb(null, true, handlers);
+            }
+        );
+
+        make_qpg(iferr(done, qpg2 => {
+            qpg.subscribe('foo', handler, iferr(done, () => {
+                qpg2.subscribe('foo', function (data, info, cb) {
+                    if (filter_called) {
+                        return cb(null, () => qpg2.stop(done));
+                    }
+                    cb('dummy failure2');
+                }, iferr(done, () => {
+                    qpg.publish('foo', 'bar', { single: true }, iferr(done, () => {}));
+                }));
+            }));
+        }));
+    });
 });
