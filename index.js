@@ -39,7 +39,7 @@ class QlobberPG extends EventEmitter {
         this._single_ttl = options.single_ttl || (60 * 60 * 1000); // 1h
         this._multi_ttl = options.multi_ttl || (60 * 1000); // 1m
         this._expire_interval = options.expire_interval || (10 * 1000) // 10s
-        this._check_interval = options.check_interval || (1 * 1000) // 1s
+        this._check_interval = options.poll_interval || (1 * 1000) // 1s
         this._do_dedup = options.dedup === undefined ? true : options.dedup;
 
         this._topics = new Map();

@@ -678,4 +678,24 @@ describe('qlobber-pq', function () {
         }));
     });
 
+    it('should support custom polling interval', function (done) {
+        make_qpg(iferr(done, qpg2 => {
+            let time = Date.now();
+            let count = 0;
+
+            qpg2.subscribe('foo', function (data, info, cb) {
+                const time2 = Date.now();
+                expect(time2 - time).to.be.below(100);
+                time = time2;
+                if (++count === 10) {
+                    return cb(null, () => qpg2.stop(done));
+                }
+                cb('dummy failure');
+            }, iferr(done, () => {
+                qpg.publish('foo', 'bar', { single: true }, iferr(done, () => {}));
+            }));
+        }), {
+            poll_interval: 50
+        });
+    });
 });
