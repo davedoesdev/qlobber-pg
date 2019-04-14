@@ -25,5 +25,5 @@ exports.up = pgm => {
     pgm.createFunction('new_message', [], {
         returns: 'trigger',
         language: 'plpgsql'
-    }, "BEGIN PERFORM pg_notify('new_message', row_to_json(NEW)::text); RETURN NULL; END;");
+    }, "BEGIN PERFORM pg_notify('new_message_' || TG_ARGV[0], row_to_json(NEW)::text); RETURN NULL; END;");
 };

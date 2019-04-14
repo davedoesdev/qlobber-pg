@@ -43,6 +43,7 @@ class QlobberPG extends EventEmitter {
         this._do_dedup = options.dedup === undefined ? true : options.dedup;
 
         this._topics = new Map();
+        this._deferred = new Set();
 
         this.filters = options.filter || [];
         if (typeof this.filters[Symbol.iterator] !== 'function') {
@@ -84,10 +85,12 @@ class QlobberPG extends EventEmitter {
                     process.nextTick(this._json_message.bind(this), msg);
                 });
             }
-            this._client.query('LISTEN new_message', iferr(emit_error, () => {
-                this._expire();
-                this._check();
-                this.emit('start');
+            this._client.query('DROP TRIGGER IF EXISTS ' + this._name + ' ON messages', iferr(emit_error, () => {
+                this._client.query('LISTEN new_message_' + this._name, iferr(emit_error, () => {
+                    this._expire();
+                    this._check();
+                    this.emit('start');
+                }));
             }));
         }));
     }
@@ -130,10 +133,12 @@ class QlobberPG extends EventEmitter {
             if (this._chkstop()) {
                 return cb();
             }
-            if (this._topics.size === 0) {
+            const test = this._topics_test(true);
+            this._deferred.clear();
+            if (!test) {
                 return cb(null, { rows: [] });
             }
-            this._client.query('SELECT * FROM messages NEW WHERE (' + this._topics_test() + ' AND NEW.single)', cb);
+            this._client.query('SELECT * FROM messages NEW WHERE (' + test + ')', cb);
         }, (err, r) => {
             if (this._chkstop()) {
                 return;
@@ -398,7 +403,7 @@ class QlobberPG extends EventEmitter {
         this._filter(payload, handlers, (err, ready, handlers) => {
             this._warning(err);
             if (!ready) {
-                return;
+                return this._deferred.add(payload.id);
             }
             if (payload.single) {
                 if (this._do_dedup) {
@@ -496,8 +501,31 @@ class QlobberPG extends EventEmitter {
                     .replace(/(^|\.)#($|\.)/, '$1*$2');
     }
 
-    _topics_test() {
-        return '(NEW.expires > NOW()) AND (' + Array.from(this._topics.keys()).map(t => "(NEW.topic ~ '" + this._ltreeify(t) +"')").join(' OR ') + ')';
+    _topics_test(check) {
+        const topics = this._topics;
+        if (topics.size === 0) {
+            if (!check || this._deferred.size == 0) {
+                return null;
+            }
+        }
+        let r = '';
+        if (topics.size > 0) {
+            r += '(' + Array.from(topics.keys()).map(t => "(NEW.topic ~ '" + this._ltreeify(t) +"')").join(' OR ') + ')';
+            if (check) {
+                r = '((' + r + ') AND NEW.single)';
+            }
+        }
+        if (check && (this._deferred.size > 0)) {
+            const bracket = r;
+            if (bracket) {
+                r = '(' + r + ' OR ';
+            }
+            r += '(' + Array.from(this._deferred).map(id => '(NEW.id = ' + id + ')').join(' OR ') + ')';
+            if (bracket) {
+                r += ')';
+            }
+        }
+        return '(' + r + ' AND (NEW.expires > NOW()))';
     }
         
     _update_trigger(cb) {
@@ -507,7 +535,10 @@ class QlobberPG extends EventEmitter {
                     throw new Error('stopped');
                 }
                 await this._client.query('DROP TRIGGER IF EXISTS ' + this._name + ' ON messages');
-                await this._client.query('CREATE TRIGGER ' + this._name + ' AFTER INSERT ON messages FOR EACH ROW WHEN (' + this._topics_test() + ') EXECUTE PROCEDURE new_message()');
+                const test = this._topics_test(false);
+                if (test) {
+                    await this._client.query('CREATE TRIGGER ' + this._name + ' AFTER INSERT ON messages FOR EACH ROW WHEN ' + test + ' EXECUTE PROCEDURE new_message(' + this._name + ')');
+                }
             }), cb);
         }, cb);
     }

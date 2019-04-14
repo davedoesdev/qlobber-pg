@@ -1,6 +1,7 @@
 const { parallel } = require('async');
 const { QlobberPG } = require('..');
 const { expect } = require('chai');
+const wu = require('wu');
 const config = require('config');
 const iferr = require('iferr');
 
@@ -380,6 +381,116 @@ describe('qlobber-pq', function () {
             qpg.subscribe('foo', handler2, iferr(done, () => {
                 qpg.publish('foo', 'bar', iferr(done, () => {}));
             }));
+        }));
+    });
+
+    it('should be able to pass filtered handlers as iterator (Set)', function (done) {
+        function handler1() {
+            done(new Error('should not be called'));
+        }
+
+        function handler2(data, info, cb) {
+            cb(null, done);
+        }
+
+        qpg.filters.push(function (info, handlers, cb) {
+            expect(info.topic).to.equal('foo');
+            cb(null, true, wu(handlers).filter(h => h !== handler1));
+        });
+
+        qpg.subscribe('foo', handler1, iferr(done, () => {
+            qpg.subscribe('foo', handler2, iferr(done, () => {
+                qpg.publish('foo', 'bar', iferr(done, () => {}));
+            }));
+        }));
+    });
+
+    it('should be able to pass filtered handlers as iterator (Array)', function (done) {
+        function handler1() {
+            done(new Error('should not be called'));
+        }
+
+        function handler2(data, info, cb) {
+            cb(null, done);
+        }
+
+        after_each(iferr(done, () => {
+            before_each(iferr(done, () => {
+                qpg.subscribe('foo', handler1, iferr(done, () => {
+                    qpg.subscribe('foo', handler2, iferr(done, () => {
+                        qpg.publish('foo', 'bar', iferr(done, () => {}));
+                    }));
+                }));
+            }), {
+                filter: function (info, handlers, cb) {
+                    expect(info.topic).to.equal('foo');
+                    cb(null, true, wu(handlers).filter(h => h !== handler1));
+                },
+                dedup: false
+            });
+        }));
+    });
+
+    it('should support multiple filters', function (done) {
+        function handler1() {
+            done(new Error('should not be called'));
+        }
+
+        function handler2() {
+            done(new Error('should not be called'));
+        }
+
+        function handler3(data, info, cb) {
+            cb(null, done);
+        }
+
+        qpg.filters.push(
+            function (info, handlers, cb) {
+                expect(info.topic).to.equal('foo');
+                handlers.delete(handler1);
+                cb(null, true, handlers);
+            },
+
+            function (info, handlers, cb) {
+                expect(info.topic).to.equal('foo');
+                handlers.delete(handler2);
+                cb(null, true, handlers);
+            }
+        );
+
+        qpg.subscribe('foo', handler1, iferr(done, () => {
+            qpg.subscribe('foo', handler2, iferr(done, () => {
+                qpg.subscribe('foo', handler3, iferr(done, () => {
+                    qpg.publish('foo', 'bar', iferr(done, () => {}));
+                }));
+            }));
+        }));
+    });
+
+    it.only('should not call other filters if error', function (done) {
+        let called = false;
+
+        qpg.filters.push(
+            function (info, handlers, cb) {
+                expect(info.topic).to.equal('foo');
+                cb(new Error('dummy'));
+                if (called) {
+                    return done();
+                }
+                called = true;
+            },
+
+            function (info, handlers, cb) {
+                done(new Error('should not be called'));
+            }
+        );
+
+        function handler() {
+            done(new Error('should not be called'));
+        }
+
+        qpg.subscribe('foo', handler, iferr(done, () => {
+            qpg.publish('foo', 'bar', iferr(done, () => {}));
         }));
     });
 });
