@@ -467,7 +467,7 @@ describe('qlobber-pq', function () {
         }));
     });
 
-    it.only('should not call other filters if error', function (done) {
+    it('should not call other filters if error', function (done) {
         let called = false;
 
         qpg.filters.push(
