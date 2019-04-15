@@ -721,7 +721,7 @@ describe('qlobber-pq', function () {
         }));
     });
 
-    it('should support unsubscribing to all handlers for a topic', function (done) {
+    it('should support unsubscribing all handlers for a topic', function (done) {
         this.timeout(5000);
 
         let count = 0;
@@ -736,6 +736,43 @@ describe('qlobber-pq', function () {
                 qpg.unsubscribe('foo', undefined, iferr(done, () => {
                     qpg.publish('foo', 'bar', iferr(done, () => {
                         setTimeout(cb, 2000, null, done);
+                    }));
+                }));
+            }
+        }
+
+        qpg.subscribe('foo', function (data, info, cb) {
+            handler(data, info, cb); 
+        }, iferr(done, () => {
+            qpg.subscribe('foo', function (data, info, cb) {
+                handler(data, info, cb); 
+            }, iferr(done, () => {
+                qpg.publish('foo', 'bar', iferr(done, () => {}));
+            }));
+        }));
+    });
+
+    it('should support unsubscribing all handlers', function (done) {
+        this.timeout(5000);
+
+        let count = 0;
+
+        function handler(data, info, cb)
+        {
+            if (++count > 2) {
+                return done(new Error('should not be called'));
+            }
+
+            if (count === 2) {
+                qpg.subscribe('foo2', function () {
+                    done(new Error('should not be called'));
+                }, iferr(done, () => {
+                    qpg.unsubscribe(iferr(done, () => {
+                        qpg.publish('foo', 'bar', iferr(done, () => {
+                            qpg.publish('foo2', 'bar2', iferr(done, () => {
+                                setTimeout(cb, 2000, null, done);
+                            }));
+                        }));
                     }));
                 }));
             }
