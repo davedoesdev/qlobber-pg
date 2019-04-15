@@ -7,7 +7,6 @@ const { Qlobber, QlobberDedup } = require('qlobber');
 
 // TODO:
 // Streams
-// Unsubscribe
 // Events
 // Existing messages and 'existing' property in info
 // Tests from qlobber-fsq
@@ -573,6 +572,26 @@ class QlobberPG extends EventEmitter {
         cb = cb || this._warning.bind(this);
 
         this._matcher.add(topic, handler);
+        this._update_trigger(cb);
+    }
+
+    unsubscribe(topic, handler, cb) {
+        if (typeof topic === 'function') {
+            cb = topic;
+            topic = undefined;
+            handler = undefined;
+        }
+
+        cb = cb || this._warning.bind(this);
+
+        if (topic === undefined) {
+            this._matcher.clear();
+        } else if (handler === undefined) {
+            this._matcher.remove(topic);
+        } else {
+            this._matcher.remove(topic, handler);
+        }
+
         this._update_trigger(cb);
     }
 

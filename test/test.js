@@ -698,4 +698,57 @@ describe('qlobber-pq', function () {
             poll_interval: 50
         });
     });
+
+    it('should support unsubscribing', function (done) {
+        this.timeout(5000);
+
+        let count = 0;
+
+        function handler(data, info, cb) {
+            if (++count > 1) {
+                return done(new Error('should not be called'));
+            }
+
+            qpg.unsubscribe('foo', handler, iferr(done, () => {
+                qpg.publish('foo', 'bar', iferr(done, () => {
+                    setTimeout(cb, 2000, null, done);
+                }));
+            }));
+        }
+
+        qpg.subscribe('foo', handler, iferr(done, () => {
+            qpg.publish('foo', 'bar', iferr(done, () => {}));
+        }));
+    });
+
+    it('should support unsubscribing to all handlers for a topic', function (done) {
+        this.timeout(5000);
+
+        let count = 0;
+
+        function handler(data, info, cb)
+        {
+            if (++count > 2) {
+                return done(new Error('should not be called'));
+            }
+
+            if (count === 2) {
+                qpg.unsubscribe('foo', undefined, iferr(done, () => {
+                    qpg.publish('foo', 'bar', iferr(done, () => {
+                        setTimeout(cb, 2000, null, done);
+                    }));
+                }));
+            }
+        }
+
+        qpg.subscribe('foo', function (data, info, cb) {
+            handler(data, info, cb); 
+        }, iferr(done, () => {
+            qpg.subscribe('foo', function (data, info, cb) {
+                handler(data, info, cb); 
+            }, iferr(done, () => {
+                qpg.publish('foo', 'bar', iferr(done, () => {}));
+            }));
+        }));
+    });
 });
