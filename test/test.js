@@ -35,6 +35,12 @@ describe('qlobber-pq', function () {
     }
     afterEach(after_each);
 
+    function exists(id, cb) {
+        qpg._queue.push(cb => qpg._client.query('SELECT EXISTS(SELECT 1 FROM messages WHERE id = $1)', [
+            id
+        ], cb), iferr(cb, r => cb(null, r.rows[0].exists)));
+    }
+
     it('should subscribe and publish to a simple topic', function (done) {
         let pub_info;
 
@@ -643,23 +649,18 @@ describe('qlobber-pq', function () {
 
     it('should support per-message time-to-live', function (done) {
         qpg.subscribe('foo', function (data, info) {
-            function exists(cb) {
-                qpg._queue.push(cb => qpg._client.query('SELECT EXISTS(SELECT 1 FROM messages WHERE id = $1)', [
-                info.id
-            ], cb), iferr(done, r => cb(r.rows[0].exists)));
-            }
-            exists(b => {
+            exists(info.id, iferr(done, b => {
                 expect(b).to.be.true;
                 setTimeout(() => {
                     qpg.force_refresh();
                     setTimeout(() => {
-                        exists(b => {
+                        exists(info.id, iferr(done, b => {
                             expect(b).to.be.false;
                             done();
-                        });
+                        }));
                     }, 500);
                 }, 500);
-            });
+            }));
         }, iferr(done, () => {
             qpg.publish('foo', 'bar', { ttl: 500 }, iferr(done, () => {}));
         }));
@@ -786,6 +787,44 @@ describe('qlobber-pq', function () {
             }, iferr(done, () => {
                 qpg.publish('foo', 'bar', iferr(done, () => {}));
             }));
+        }));
+    });
+
+    it('should support changing the default time-to-live', function (done) {
+        this.timeout(5000);
+        after_each(iferr(done, () => {
+            before_each(iferr(done, () => {
+                let got_single = false;
+                let got_multi = false;
+
+                qpg.subscribe('foo', function (data, info, cb) {
+                    cb(null, () => {
+                        if (info.single) {
+                            got_single = true;
+                        } else {
+                            got_multi = true;
+                        }
+
+                        if (got_single && got_multi) {
+                            setTimeout(() => {
+                                qpg.force_refresh();
+                                setTimeout(() => {
+                                    exists(info.id, iferr(done, b => {
+                                        expect(b).to.be.false;
+                                        done();
+                                    }));
+                                }, 1000);
+                            }, 1000);
+                        }
+                    });
+                }, iferr(done, () => {
+                    qpg.publish('foo', 'bar', iferr(done, () => {}));
+                    qpg.publish('foo', 'bar', { single: true }, iferr(done, () => {}));
+                }));
+            }), {
+                multi_ttl: 1000,
+                single_ttl: 1000
+            });
         }));
     });
 });
