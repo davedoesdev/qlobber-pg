@@ -1,4 +1,4 @@
-const { parallel } = require('async');
+const { parallel, timesSeries, eachSeries } = require('async');
 const { QlobberPG } = require('..');
 const { expect } = require('chai');
 const wu = require('wu');
@@ -825,6 +825,72 @@ describe('qlobber-pq', function () {
                 multi_ttl: 1000,
                 single_ttl: 1000
             });
+        }));
+    });
+
+    it('should publish and receive twice', function (done) {
+        let count_multi = 0;
+        let count_single = 0;
+
+        qpg.subscribe('foo', function (data, info, cb) {
+            cb(null, () => {
+                if (info.single) {
+                    ++count_single;
+                } else {
+                    ++count_multi;
+                }
+                if ((count_single == 2) && (count_multi === 2)) {
+                    done();
+                } else if ((count_single > 2) || (count_multi > 2)) {
+                    done(new Error('called too many times'));
+                }
+            });
+        }, iferr(done, () => {
+            timesSeries(2, (n, cb) => {
+                eachSeries([true, false], (single, cb) => {
+                    qpg.publish('foo', 'bar', { single }, cb);
+                }, cb);
+            }, iferr(done, () => {}));
+        }));
+    });
+
+    it('should fail to publish and subscribe to messages with > 255 character topics', function (done) {
+        const arr = [];
+        arr.length = 257
+        const topic = arr.join('a');
+
+        qpg.subscribe(topic, () => {}, err => {
+            expect(err.message).to.equal('name of level is too long');
+            qpg.publish(topic, 'bar', { ttl: 1000 }, err => {
+                expect(err.message).to.equal('name of level is too long');
+                done();
+            });
+        });
+    });
+
+    it('should publish and subscribe to messages with 255 character topics', function (done) {
+        this.timeout(5000);
+
+        const arr = [];
+        arr.length = 256;
+        const topic = arr.join('a');
+
+        qpg.subscribe(topic, function (data, info) {
+            expect(info.topic).to.equal(topic);
+            expect(info.single).to.equal(false);
+            expect(data.toString()).to.equal('bar');
+
+            setTimeout(() => {
+                qpg.force_refresh();
+                setTimeout(() => {
+                    exists(info.id, iferr(done, b => {
+                        expect(b).to.be.false;
+                        done();
+                    }));
+                }, 500);
+            }, 1000);
+        }, iferr(done, () => {
+            qpg.publish(topic, 'bar', { ttl: 1000 }, iferr(done, () => {}));
         }));
     });
 });
