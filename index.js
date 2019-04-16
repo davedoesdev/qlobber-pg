@@ -71,27 +71,53 @@ class QlobberPG extends EventEmitter {
         this.active = true;
 
         const emit_error = err => {
-            this.emit('error', err);
+            if (err) {
+                this.stopped = true;
+                this.emit('error', err);
+            }
         };
 
         this._client = new Client(this._db);
-        this._client.connect(iferr(emit_error, () => {
-            if (options.notify !== false) {
-                this._client.on('notification', msg => {
-                    if (this._chkstop()) {
-                        return;
-                    }
-                    process.nextTick(this._json_message.bind(this), msg);
-                });
+
+        if (options.notify !== false) {
+            this._client.on('notification', msg => {
+                if (this._chkstop()) {
+                    return;
+                }
+                process.nextTick(this._json_message.bind(this), msg);
+            });
+        }
+
+        this._queue.push(cb => {
+            if (this._chkstop()) {
+                return;
             }
-            this._client.query('DROP TRIGGER IF EXISTS ' + this._name + ' ON messages', iferr(emit_error, () => {
-                this._client.query('LISTEN new_message_' + this._name, iferr(emit_error, () => {
-                    this._expire();
-                    this._check();
-                    this.emit('start');
-                }));
-            }));
-        }));
+            this._client.connect(cb);
+        }, emit_error);
+
+        this._queue.push(cb => {
+            if (this._chkstop()) {
+                return;
+            }
+            this._client.query('DROP TRIGGER IF EXISTS ' + this._name + ' ON messages', cb);
+        }, emit_error);
+
+        this._queue.push(cb => {
+            if (this._chkstop()) {
+                return;
+            }
+            this._client.query('LISTEN new_message_' + this._name, cb);
+        }, emit_error);
+
+        this._queue.push(cb => {
+            if (this._chkstop()) {
+                return;
+            }
+            this._expire();
+            this._check();
+            this.emit('start');
+            cb();
+        });
     }
 
     _chkstop() {
@@ -447,8 +473,6 @@ class QlobberPG extends EventEmitter {
                 this.emit('error', err);
             }
         });
-
-        this._warning.bind(this);
 
         if (this.stopped) {
             return cb.call(this);

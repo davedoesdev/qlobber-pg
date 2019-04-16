@@ -13,7 +13,10 @@ describe('qlobber-pq', function () {
             name: 'test1' 
         }, config, options));
         qpg.on('warning', console.error);
-        qpg.on('start', () => cb(null, qpg));
+        if (cb) {
+            return qpg.on('start', () => cb(null, qpg));
+        }
+        return qpg;
     }
 
     function before_each(cb, options) {
@@ -31,7 +34,11 @@ describe('qlobber-pq', function () {
     });
     
     function after_each(cb) {
-        qpg.stop(cb);
+        if (qpg) {
+            qpg.stop(cb);
+        } else {
+            cb();
+        }
     }
     afterEach(after_each);
 
@@ -586,7 +593,7 @@ describe('qlobber-pq', function () {
             qpg.subscribe('foo', handler, iferr(done, () => {
                 qpg2.subscribe('foo', function (data, info, cb) {
                     if (filter_called) {
-                        return cb(null, () => qpg2.stop(done));
+                        return cb(null, iferr(done, () => qpg2.stop(done)));
                     }
                     cb('dummy failure2');
                 }, iferr(done, () => {
@@ -689,7 +696,7 @@ describe('qlobber-pq', function () {
                 expect(time2 - time).to.be.below(100);
                 time = time2;
                 if (++count === 10) {
-                    return cb(null, () => qpg2.stop(done));
+                    return cb(null, iferr(done, () => qpg2.stop(done)));
                 }
                 cb('dummy failure');
             }, iferr(done, () => {
@@ -891,6 +898,46 @@ describe('qlobber-pq', function () {
             }, 1000);
         }, iferr(done, () => {
             qpg.publish(topic, 'bar', { ttl: 1000 }, iferr(done, () => {}));
+        }));
+    });
+
+    it('should not read multi-worker messages which already exist', function (done) {
+        this.timeout(10000);
+
+        qpg.publish('foo', 'bar', iferr(done, () => {
+            after_each(iferr(done, () => {
+                before_each(iferr(done, () => {
+                    qpg.subscribe('foo', function () {
+                        done(new Error('should not be called'));
+                    }, iferr(done, () => {
+                        setTimeout(done, 5000);
+                    }));
+                }));
+            }));
+        }));
+    });
+
+    it('should read single-worker messages which already exist', function (done) {
+        qpg.publish('foo', 'bar', { single: true }, iferr(done, () => {
+            after_each(iferr(done, () => {
+                before_each(iferr(done, () => {
+                    qpg.subscribe('foo', function (data, info, cb) {
+                        cb(null, done);
+                    }, iferr(done, () => {}));
+                }));
+            }));
+        }));
+    });
+
+    it('should read single-worker messages which already exist (before start)', function (done) {
+
+        qpg.publish('foo', 'bar', { single: true }, iferr(done, () => {
+            after_each(iferr(done, () => {
+                const qpg = make_qpg();
+                qpg.subscribe('foo', function (data, info, cb) {
+                    cb(null, iferr(done, () => qpg.stop(done)));
+                }, iferr(done, () => {}));
+            }));
         }));
     });
 });
