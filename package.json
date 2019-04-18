@@ -39,6 +39,7 @@
     "iferr": "^1.0.2",
     "node-pg-migrate": "^3.18.1",
     "pg": "^7.9.0",
+    "pg-escape": "^0.2.0",
     "qlobber": "^3.1.0"
   },
   "devDependencies": {

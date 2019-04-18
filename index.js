@@ -4,10 +4,9 @@ const { Client } = require('pg');
 const { queue, asyncify } = require('async');
 const iferr = require('iferr');
 const { Qlobber, QlobberDedup } = require('qlobber');
+const escape = require('pg-escape');
 
 // TODO:
-// Escape topics_test
-// Doc that name will go into SQL or escape it
 // Existing messages and 'existing' property in info
 // Events
 // Tests from qlobber-fsq
@@ -106,14 +105,14 @@ class QlobberPG extends EventEmitter {
             if (this._chkstop()) {
                 return;
             }
-            this._client.query('DROP TRIGGER IF EXISTS ' + this._name + ' ON messages', cb);
+            this._client.query(escape('DROP TRIGGER IF EXISTS %I ON messages', this._name), cb);
         }, close_and_emit_error);
 
         this._queue.push(cb => {
             if (this._chkstop()) {
                 return;
             }
-            this._client.query('LISTEN new_message_' + this._name, cb);
+            this._client.query(escape('LISTEN new_message_%I', this._name), cb);
         }, close_and_emit_error);
 
         this._queue.push(cb => {
@@ -189,7 +188,7 @@ class QlobberPG extends EventEmitter {
             if (!test) {
                 return cb(null, { rows: [] });
             }
-            this._client.query('SELECT * FROM messages AS NEW WHERE (' + test + ')', cb);
+            this._client.query(`SELECT * FROM messages AS NEW WHERE (${test})`, cb);
         }, (err, r) => {
             if (this._chkstop()) {
                 return;
@@ -566,22 +565,22 @@ class QlobberPG extends EventEmitter {
         }
         let r = '';
         if (topics.size > 0) {
-            r += '(' + Array.from(topics.keys()).map(t => "(NEW.topic ~ '" + this._ltreeify(t) +"')").join(' OR ') + ')';
+            r = `(${Array.from(topics.keys()).map(t => escape('(NEW.topic ~ %L)', this._ltreeify(t))).join(' OR ')})`;
             if (check) {
-                r = '((' + r + ') AND NEW.single)';
+                r = `((${r}) AND NEW.single)`;
             }
         }
         if (check && (this._deferred.size > 0)) {
             const bracket = r;
             if (bracket) {
-                r = '(' + r + ' OR ';
+                r = `(${r} OR `;
             }
-            r += '(' + Array.from(this._deferred).map(id => '(NEW.id = ' + id + ')').join(' OR ') + ')';
+            r = `${r}(${Array.from(this._deferred).map(id => escape('(NEW.id = %L)', String(id))).join(' OR ')})`;
             if (bracket) {
-                r += ')';
+                r = `${r})`;
             }
         }
-        return '(' + r + ' AND (NEW.expires > NOW()))';
+        return `(${r} AND (NEW.expires > NOW()))`;
     }
         
     _update_trigger(cb) {
@@ -590,10 +589,10 @@ class QlobberPG extends EventEmitter {
                 if (this._chkstop()) {
                     throw new Error('stopped');
                 }
-                await this._client.query('DROP TRIGGER IF EXISTS ' + this._name + ' ON messages');
+                await this._client.query(escape('DROP TRIGGER IF EXISTS %I ON messages', this._name));
                 const test = this._topics_test(false);
                 if (test) {
-                    await this._client.query('CREATE TRIGGER ' + this._name + ' AFTER INSERT ON messages FOR EACH ROW WHEN ' + test + ' EXECUTE PROCEDURE new_message(' + this._name + ')');
+                    await this._client.query(escape(`CREATE TRIGGER %I AFTER INSERT ON messages FOR EACH ROW WHEN ${test} EXECUTE PROCEDURE new_message(%I)`, this._name, this._name));
                 }
             }), cb);
         }, cb);
