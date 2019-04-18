@@ -1,4 +1,4 @@
-const { Writable } = require('stream');
+const { Writable, PassThrough } = require('stream');
 const { EventEmitter } = require('events');
 const { Client } = require('pg');
 const { queue, asyncify } = require('async');
@@ -6,11 +6,11 @@ const iferr = require('iferr');
 const { Qlobber, QlobberDedup } = require('qlobber');
 
 // TODO:
-// Streams
-// Events
-// Existing messages and 'existing' property in info
-// Tests from qlobber-fsq
+// Escape topics_test
 // Doc that name will go into SQL or escape it
+// Existing messages and 'existing' property in info
+// Events
+// Tests from qlobber-fsq
 
 class CollectStream extends Writable {
     constructor() {
@@ -77,6 +77,13 @@ class QlobberPG extends EventEmitter {
             }
         };
 
+        const close_and_emit_error = err => {
+            if (err) {
+                this.stopped = true;
+                this._client.end(() => this.emit('error', err));
+            }
+        };
+
         this._client = new Client(this._db);
 
         if (options.notify !== false) {
@@ -100,14 +107,14 @@ class QlobberPG extends EventEmitter {
                 return;
             }
             this._client.query('DROP TRIGGER IF EXISTS ' + this._name + ' ON messages', cb);
-        }, emit_error);
+        }, close_and_emit_error);
 
         this._queue.push(cb => {
             if (this._chkstop()) {
                 return;
             }
             this._client.query('LISTEN new_message_' + this._name, cb);
-        }, emit_error);
+        }, close_and_emit_error);
 
         this._queue.push(cb => {
             if (this._chkstop()) {
@@ -282,8 +289,8 @@ class QlobberPG extends EventEmitter {
 
             const common_callback = (err, cb) => {
                 if (destroyed) {
-                    wait_for_done(err, cb);
-                    return null;
+                    this._warning(err);
+                    return err => wait_for_done(err, cb);
                 }
 
                 destroyed = true;
@@ -309,37 +316,22 @@ class QlobberPG extends EventEmitter {
             };
 
             const multi_callback = (err, cb) => {
-                const cb2 = common_callback(err, cb);
-                if (!cb2) {
-                    return;
-                }
-                cb2();
+                common_callback(err, cb)();
             };
 
             const single_callback = (err, cb) => {
                 const cb2 = common_callback(err, cb);
-                if (!cb2) {
-                    return;
+                if (!lock_client) {
+                    return cb2();
                 }
+                const lc = lock_client;
+                lock_client = null;
                 if (err) {
-                    return lock_client.end(cb2);
+                    return lc.end(cb2);
                 }
-                this._in_transaction(cb => {
-                    this._queue.unshift(asyncify(async () => {
-                        try {
-                            if (this._chkstop()) {
-                                throw new Error('stopped');
-                            }
-                            if (!err) {
-                                await this._client.query('DELETE FROM messages WHERE id = $1', [
-                                    info.id
-                                ]);
-                            }
-                        } finally {
-                            await lock_client.end();
-                        }
-                    }), cb);
-                }, cb2);
+                lc.query('DELETE FROM messages WHERE id = $1', [
+                    info.id
+                ], err => lc.end(err2 => cb2(err || err2)));
             };
 
             const hcb = info.single ? single_callback : multi_callback;
@@ -369,6 +361,8 @@ class QlobberPG extends EventEmitter {
                     this._warning(err);
                     sdone();
                 });
+
+                return stream;
             };
 
             for (let handler of handlers) {
@@ -413,7 +407,7 @@ class QlobberPG extends EventEmitter {
                 return null;
             }
             try {
-                r = await this._client.query('SELECT EXISTS(SELECT 1 FROM messages WHERE id = $1)', [
+                r = await this._client.query('SELECT EXISTS(SELECT 1 FROM messages WHERE (id = $1 AND (expires > NOW())))', [
                     info.id
                 ]);
             } catch (ex) {
@@ -426,8 +420,11 @@ class QlobberPG extends EventEmitter {
             await lock_client.end();
             return null;
         }), iferr(done, lock_client => {
-            if (!lock_client || this._chkstop()) {
+            if (!lock_client) {
                 return done();
+            }
+            if (this._chkstop()) {
+                return lock_client.end(done);
             }
             deliver_message(lock_client);
         }));
@@ -464,7 +461,23 @@ class QlobberPG extends EventEmitter {
     }
 
     _json_message(msg) {
-        this._message(JSON.parse(msg.payload));
+        this._queue.push(cb => {
+            if (this._chkstop()) {
+                return cb();
+            }
+            this._client.query('SELECT * FROM messages WHERE ((id = $1) AND (expires > NOW()))', [
+                JSON.parse(msg.payload)
+            ], cb);
+        }, (err, r) => {
+            if (this._chkstop()) {
+                return;
+            }
+            if (!this._warning(err)) {
+                for (let msg of r.rows) {
+                    this._message(msg);
+                }
+            }
+        });
     }
 
     stop(cb) {
@@ -634,7 +647,12 @@ class QlobberPG extends EventEmitter {
         }
 
         options = options || {};
-        cb = cb || this._warning.bind(this);
+        const cb2 = (err, ...args) => {
+            this._warning(err);
+            if (cb) {
+                cb.call(this, err, ...args);
+            }
+        };
 
         const now = Date.now();
         const expires = now + (options.ttl || (options.single ? this._single_ttl : this._multi_ttl));
@@ -642,14 +660,14 @@ class QlobberPG extends EventEmitter {
 
         const insert = data => {
             if (this._chkstop()) {
-                return cb(new Error('stopped'));
+                return cb2(new Error('stopped'));
             }
-            this._queue.push(cb => this._client.query('INSERT INTO messages(topic, expires, single, data) VALUES($1, $2, $3, $4)', [
+            this._queue.push(cb => this._client.query("INSERT INTO messages(topic, expires, single, data) VALUES($1, $2, $3, decode($4::text, 'hex'))", [
                 topic,
                 new Date(expires),
                 single,
-                data
-            ], cb), iferr(cb, () => cb.call(this, null, {
+                data.toString('hex')
+            ], cb), iferr(cb2, () => cb2(null, {
                 topic,
                 expires,
                 single,

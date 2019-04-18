@@ -1,3 +1,6 @@
+const path = require('path');
+const { randomBytes, createHash } = require('crypto');
+const { writeFile, createReadStream } = require('fs');
 const { parallel, timesSeries, eachSeries } = require('async');
 const { QlobberPG } = require('..');
 const { expect } = require('chai');
@@ -7,6 +10,15 @@ const iferr = require('iferr');
 
 describe('qlobber-pq', function () {
     let qpg;
+    let random_hash;
+
+    before(function (cb) {
+        const buf = randomBytes(1024 * 1024);
+        const hash = createHash('sha256');
+        hash.update(buf);
+        random_hash = hash.digest();
+        writeFile(path.join(__dirname, 'random'), buf, cb);
+    });
 
     function make_qpg(cb, options) {
         const qpg = new QlobberPG(Object.assign({
@@ -49,26 +61,31 @@ describe('qlobber-pq', function () {
     }
 
     it('should subscribe and publish to a simple topic', function (done) {
-        let pub_info;
+        let pub_info, sub_info;
+
+        function check()
+        {
+            if (pub_info && sub_info) {
+                pub_info.id = sub_info.id;
+                pub_info.data = sub_info.data;
+                pub_info.expires = Math.floor(pub_info.expires / 1000) * 1000;
+                expect(pub_info).to.eql(sub_info);
+                done();
+            }
+        }
 
         qpg.subscribe('foo', (data, info, cb) => {
             expect(info.topic).to.equal('foo');
             expect(info.single).to.be.false;
             expect(data.toString()).to.equal('bar');
             expect(cb.num_handlers).to.equal(1);
-
-            pub_info.id = info.id;
-            pub_info.data = info.data;
-            expect(info).to.eql(pub_info);
-
-            done();
+            sub_info = info;
+            check();
         }, iferr(done, () => {
-            qpg.publish('foo', 'bar', function (err, info) {
-                if (err) {
-                    return done(err);
-                }
+            qpg.publish('foo', 'bar', iferr(done, info => {
                 pub_info = info;
-            });
+                check();
+            }));
         }));
     });
 
@@ -938,6 +955,77 @@ describe('qlobber-pq', function () {
                     cb(null, iferr(done, () => qpg.stop(done)));
                 }, iferr(done, () => {}));
             }));
+        }));
+    });
+
+    it('should support streaming interfaces', function (done) {
+        let stream_multi;
+        let stream_single;
+        let stream_file;
+        let sub_multi_called = false;
+        let sub_single_called = false;
+        let pub_multi_called = false;
+        let pub_single_called = false;
+
+        function handler(stream, info, cb) {
+            const hash = createHash('sha256');
+            let len = 0;
+
+            stream.on('readable', function () {
+                while (true) {
+                    const chunk = stream.read();
+                    if (!chunk) {
+                        break;
+                    }
+                    len += chunk.length;
+                    hash.update(chunk);
+                }
+            });
+
+            stream.on('end', function () {
+                expect(len).to.equal(1024 * 1024);
+                expect(hash.digest().equals(random_hash)).to.be.true;
+                cb(null, function () {
+                    if (info.single) {
+                        expect(sub_single_called).to.be.false;
+                        sub_single_called = true;
+                    } else {
+                        expect(sub_multi_called).to.be.false;
+                        sub_multi_called = true;
+                    }
+
+                    if (pub_multi_called && pub_single_called &&
+                        sub_multi_called && sub_single_called) {
+                        done();
+                    }
+                });
+            });
+        }
+        handler.accept_stream = true;
+
+        function published() {
+            if (pub_multi_called && pub_single_called &&
+                sub_multi_called && sub_single_called) {
+                done();
+            }
+        }
+
+        qpg.subscribe('foo', handler, iferr(done, () => {
+            stream_multi = qpg.publish('foo', iferr(done, () => {
+                expect(pub_multi_called).to.be.false;
+                pub_multi_called = true;
+                published();
+            }));
+
+            stream_single = qpg.publish('foo', { single: true }, iferr(done, () => {
+                expect(pub_single_called).to.be.false;
+                pub_single_called = true;
+                published();
+            }));
+
+            stream_file = createReadStream(path.join(__dirname, 'random'));
+            stream_file.pipe(stream_multi);
+            stream_file.pipe(stream_single);
         }));
     });
 });
