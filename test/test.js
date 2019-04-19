@@ -500,6 +500,8 @@ describe('qlobber-pq', function () {
     });
 
     it('should not call other filters if error', function (done) {
+        this.timeout(5000);
+
         let called = false;
 
         qpg.filters.push(
@@ -1134,7 +1136,7 @@ describe('qlobber-pq', function () {
                     cb(null, done);
                 }, iferr(done, () => {
                     time = Date.now();
-                    qpg.publish('foo', 'bar', { single: true }, iferr(done, () => {}));
+                    qpg.publish('foo', 'bar', iferr(done, () => {}));
                 }));
             }), {
                 poll_interval: 10 * 1000,
@@ -1157,9 +1159,52 @@ describe('qlobber-pq', function () {
                     // from here it may not be poll_interval until the message
                     // is received - which is why we subtract a second above.
                     qpg.publish('foo', 'bar', {
-                        single: true,
                         ttl: 30 * 1000
                     }, iferr(done, () => {}));
+                }));
+            }), {
+                poll_interval: 10 * 1000,
+                notify: false
+            });
+        }));
+    });
+
+    it('should read one message at a time by default', function (done) {
+        this.timeout(60000);
+
+        after_each(iferr(done, () => {
+            before_each(iferr(done, () => {
+                let in_call = false;
+                let count = 0;
+
+                function handler(stream, info, cb) {
+                    expect(in_call).to.equal(false);
+                    in_call = true;
+                    ++count;
+
+                    stream.on('end', function () {
+                        in_call = false;
+                        cb(null, count === 5 ? done : null);
+                    });
+
+                    if (count === 5) {
+                        return stream.on('data', () => {});
+                    }
+
+                    // Give time for other reads to start.
+                    setTimeout(() => {
+                        stream.on('data', () => {});
+                    }, 5 * 1000);
+                }
+                handler.accept_stream = true;
+
+                qpg.subscribe('foo', handler, iferr(done, () => {
+                    for (let i = 0; i < 5; ++i) {
+                        qpg.publish('foo', 'bar', {
+                            ttl: 2 * 60 * 1000,
+                            single: true
+                        }, iferr(done, () => {}));
+                    }
                 }));
             }), {
                 poll_interval: 10 * 1000,

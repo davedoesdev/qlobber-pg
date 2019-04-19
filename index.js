@@ -60,8 +60,12 @@ class QlobberPG extends EventEmitter {
 
         this._queue = queue((task, cb) => task(cb));
 
+        this._message_queue = queue(this._handle_message.bind(this),
+                                    options.message_concurrency || 1);
+
         if (options.handler_concurrency) {
             this._handler_queue = queue((task, cb) => {
+                setImmediate(task.cb);
                 this._call_handlers2(task.handlers, task.info, cb);
             }, options.handler_concurrency);
         }
@@ -107,6 +111,15 @@ class QlobberPG extends EventEmitter {
             }
             this._client.query(escape('DROP TRIGGER IF EXISTS %I ON messages', this._name), cb);
         }, close_and_emit_error);
+
+        this._queue.push(cb => {
+            if (this._chkstop()) {
+                return;
+            }
+            this._client.query('SELECT id FROM messages ORDER BY id DESC LIMIT 1', cb);
+        }, iferr(close_and_emit_error, r => {
+            this._last_id = (r.rows.length > 0) ? r.rows[0].id : -1;
+        }));
 
         this._queue.push(cb => {
             if (this._chkstop()) {
@@ -194,12 +207,24 @@ class QlobberPG extends EventEmitter {
                 return;
             }
             if (!this._warning(err)) {
-                this._deferred.clear();
+                const deferred = this._deferred;
+                this._deferred = new Set();
+                const done = () => {
+                    this._check_timeout = setTimeout(this._check.bind(this), this._check_delay);
+                };
+                if (r.rows.length === 0) {
+                    return done();
+                }
+                let count = 0;
+                const check = () => {
+                    if (++count === r.rows.length) {
+                        done();
+                    }
+                };
                 for (let msg of r.rows) {
-                    this._message(msg);
+                    this._message(msg, deferred.has(msg.id), check);
                 }
             }
-            this._check_timeout = setTimeout(this._check.bind(this), this._check_delay);
         });
     }
 
@@ -228,8 +253,6 @@ class QlobberPG extends EventEmitter {
     }
 
     _call_handlers2(handlers, info, cb) {
-        cb = cb || this._warning.bind(this);
-
         let called = false;
         let done_err = null;
         let waiting = [];
@@ -429,22 +452,24 @@ class QlobberPG extends EventEmitter {
         }));
     }
 
-    _call_handlers(handlers, info) {
+    _call_handlers(handlers, info, cb) {
         if (this._handler_queue) {
             return this._handler_queue.push({
                 handlers,
-                info
+                info,
+                cb
             });
         }
-        this._call_handlers2(handlers, info);
+        this._call_handlers2(handlers, info, cb);
     }
 
-    _message(payload) {
+    _handle_message(payload, cb) {
         const handlers = this._matcher.match(payload.topic);
         this._filter(payload, handlers, (err, ready, handlers) => {
             this._warning(err);
             if (!ready) {
-                return this._deferred.add(payload.id);
+                this._deferred.add(payload.id);
+                return cb();
             }
             if (payload.single) {
                 if (this._do_dedup) {
@@ -455,17 +480,40 @@ class QlobberPG extends EventEmitter {
                     handlers = [handlers[0]];
                 }
             }
-            this._call_handlers(handlers, payload);
+            if (handlers.length === 0) {
+                return cb();
+            }
+            this._call_handlers(handlers, payload, cb);
         });
     }
 
+    _should_handle_message(payload) {
+        if (payload.id > this._last_id) {
+            this._last_id = payload.id;
+            return true;
+        }
+
+        return payload.single;
+    }
+
+    _message(payload, deferred, cb) {
+        if (deferred || this._should_handle_message(payload)) {
+            return this._message_queue.push(payload, cb);
+        }
+        cb();
+    }
+
     _json_message(msg) {
+        const { f1: id, f2: single } = JSON.parse(msg.payload);
+        if (!this._should_handle_message({ id, single })) {
+            return;
+        }
         this._queue.push(cb => {
             if (this._chkstop()) {
                 return cb();
             }
             this._client.query('SELECT * FROM messages WHERE ((id = $1) AND (expires > NOW()))', [
-                JSON.parse(msg.payload)
+                id
             ], cb);
         }, (err, r) => {
             if (this._chkstop()) {
@@ -473,7 +521,7 @@ class QlobberPG extends EventEmitter {
             }
             if (!this._warning(err)) {
                 for (let msg of r.rows) {
-                    this._message(msg);
+                    this._message_queue.push(msg, () => {});
                 }
             }
         });
@@ -567,7 +615,7 @@ class QlobberPG extends EventEmitter {
         if (topics.size > 0) {
             r = `(${Array.from(topics.keys()).map(t => escape('(NEW.topic ~ %L)', this._ltreeify(t))).join(' OR ')})`;
             if (check) {
-                r = `((${r}) AND NEW.single)`;
+                r = `((${r}) AND ((NEW.id > ${this._last_id}) OR NEW.single))`;
             }
         }
         if (check && (this._deferred.size > 0)) {
