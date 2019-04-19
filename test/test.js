@@ -1,4 +1,5 @@
 const path = require('path');
+const { Writable } = require('stream');
 const { randomBytes, createHash } = require('crypto');
 const { writeFile, createReadStream } = require('fs');
 const { parallel, timesSeries, eachSeries } = require('async');
@@ -11,13 +12,14 @@ const iferr = require('iferr');
 describe('qlobber-pq', function () {
     let qpg;
     let random_hash;
+    let random_path = path.join(__dirname, 'random');
 
     before(function (cb) {
         const buf = randomBytes(1024 * 1024);
         const hash = createHash('sha256');
         hash.update(buf);
         random_hash = hash.digest();
-        writeFile(path.join(__dirname, 'random'), buf, cb);
+        writeFile(random_path, buf, cb);
     });
 
     function make_qpg(cb, options) {
@@ -1023,9 +1025,71 @@ describe('qlobber-pq', function () {
                 published();
             }));
 
-            stream_file = createReadStream(path.join(__dirname, 'random'));
+            stream_file = createReadStream(random_path);
             stream_file.pipe(stream_multi);
             stream_file.pipe(stream_single);
+        }));
+    });
+
+    it('should pipe to more than one stream', function (done) {
+        let done1 = false;
+        let done2 = false;
+
+        class CheckStream extends Writable {
+            constructor() {
+                super();
+                this._hash = createHash('sha256');
+                this._len = 0;
+
+                this.on('finish', () => {
+                    this.emit('done', {
+                        digest: this._hash.digest(),
+                        len: this._len
+                    });
+                });
+            }
+
+            _write(chunk, encoding, cb) {
+                this._len += chunk.length;
+                this._hash.update(chunk);
+                cb();
+            }
+        }
+
+        function check(obj, cb) {
+            expect(obj.len).to.equal(1024 * 1024);
+            expect(obj.digest.equals(random_hash)).to.be.true;
+            if (done1 && done2) {
+                return cb(null, done);
+            }
+            cb();
+        }
+
+        function handler1(stream, info, cb) {
+            const cs = new CheckStream();
+            cs.on('done', obj => {
+                done1 = true;
+                check(obj, cb);
+            });
+            stream.pipe(cs);
+        }
+        handler1.accept_stream = true;
+
+        function handler2(stream, info, cb) {
+            const cs = new CheckStream();
+            cs.on('done', obj => {
+                done2 = true;
+                check(obj, cb);
+            });
+            stream.pipe(cs);
+        }
+        handler2.accept_stream = true;
+
+        qpg.subscribe('foo', handler1, iferr(done, () => {
+            qpg.subscribe('foo', handler2, iferr(done, () => {
+                createReadStream(random_path).pipe(
+                    qpg.publish('foo', iferr(done, () => {})));
+            }));
         }));
     });
 });
