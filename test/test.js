@@ -1124,4 +1124,47 @@ describe('qlobber-pq', function () {
                 qpg.publish('foo', iferr(done, () => {})));
         }));
     });
+
+    it('should use trigger to process messages straight away', function (done) {
+        after_each(iferr(done, () => {
+            before_each(iferr(done, () => {
+                let time;
+                qpg.subscribe('foo', function (data, info, cb) {
+                    expect(Date.now() - time).to.be.below(qpg._check_interval);
+                    cb(null, done);
+                }, iferr(done, () => {
+                    time = Date.now();
+                    qpg.publish('foo', 'bar', { single: true }, iferr(done, () => {}));
+                }));
+            }), {
+                poll_interval: 10 * 1000,
+            });
+        }));
+    });
+
+    it('should be able to disable trigger', function (done) {
+        this.timeout(40000);
+
+        after_each(iferr(done, () => {
+            before_each(iferr(done, () => {
+                let time;
+                qpg.subscribe('foo', function (data, info, cb) {
+                    expect(Date.now() - time).to.be.at.least(qpg._check_interval - 1000);
+                    cb(null, done);
+                }, iferr(done, () => {
+                    time = Date.now();
+                    // The countdown to the next poll has already started so
+                    // from here it may not be poll_interval until the message
+                    // is received - which is why we subtract a second above.
+                    qpg.publish('foo', 'bar', {
+                        single: true,
+                        ttl: 30 * 1000
+                    }, iferr(done, () => {}));
+                }));
+            }), {
+                poll_interval: 10 * 1000,
+                notify: false
+            });
+        }));
+    });
 });
