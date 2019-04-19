@@ -1092,4 +1092,36 @@ describe('qlobber-pq', function () {
             }));
         }));
     });
+
+    it('should not call the same handler with stream and data', function (done) {
+        function handler(stream, info, cb) {
+            expect(Buffer.isBuffer(stream)).to.equal(false);
+
+            const hash = createHash('sha256');
+            let len = 0;
+
+            stream.on('readable', function () {
+                while (true) {
+                    const chunk = stream.read();
+                    if (!chunk) {
+                        break;
+                    }
+                    len += chunk.length;
+                    hash.update(chunk);
+                }
+            });
+
+            stream.on('end', function () {
+                expect(len).to.equal(1024 * 1024);
+                expect(hash.digest().equals(random_hash)).to.be.true;
+                cb(null, done);
+            });
+        }
+        handler.accept_stream = true;
+
+        qpg.subscribe('foo', handler, iferr(done, () => {
+            createReadStream(random_path).pipe(
+                qpg.publish('foo', iferr(done, () => {})));
+        }));
+    });
 });
