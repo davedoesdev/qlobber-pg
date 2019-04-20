@@ -2,7 +2,7 @@ const path = require('path');
 const { Writable } = require('stream');
 const { randomBytes, createHash } = require('crypto');
 const { writeFile, createReadStream } = require('fs');
-const { parallel, timesSeries, eachSeries } = require('async');
+const { parallel, timesSeries, eachSeries, each } = require('async');
 const { QlobberPG } = require('..');
 const { expect } = require('chai');
 const wu = require('wu');
@@ -1256,6 +1256,46 @@ describe('qlobber-pq', function () {
                 notify: false,
                 message_concurrency: 2
             });
+        }));
+    });
+
+    it('should clear up expired messages', function (done) {
+        this.timeout(120000);
+
+        const num_queues = 99; // max is 100, leave 1 in case pgadmin3 running
+        const num_messages = 500;
+
+        after_each(iferr(done, () => {
+            timesSeries(num_queues, (n, cb) => {
+                make_qpg(cb, {
+                    name: `test${n}`
+                });
+            }, iferr(done, qpgs => {
+                expect(qpgs.length).to.equal(num_queues);
+                timesSeries(num_messages, (n, cb) => {
+                    qpgs[0].publish('foo', 'bar', { ttl: 2 * 1000 }, cb);
+                }, iferr(done, () => {
+                    setTimeout(() => {
+                        each(qpgs, (qpg, next) => {
+                            qpg.subscribe('foo', () => {
+                                done(new Error('should not be called'));
+                            }, iferr(done, () => {
+                                qpg.force_refresh();
+                                next();
+                            }));
+                        }, iferr(done, () => {
+                            setTimeout(() => {
+                                each(qpgs, (qpg, next) => {
+                                    qpg._queue.push(cb => qpg._client.query('SELECT id FROM messages', cb), iferr(next, r => {
+                                        expect(r.rows.length).to.equal(0);
+                                        qpg.stop(next);
+                                    }));
+                                }, done);
+                            }, 5000);
+                        }));
+                    }, 2000);
+                }));
+            }));
         }));
     });
 });
