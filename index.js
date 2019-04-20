@@ -94,7 +94,7 @@ class QlobberPG extends EventEmitter {
                 if (this._chkstop()) {
                     return;
                 }
-                process.nextTick(this._json_message.bind(this), msg);
+                this._check_now();
             });
         }
 
@@ -155,15 +155,7 @@ class QlobberPG extends EventEmitter {
         return err;
     }
 
-    force_refresh() {
-        if (this._expire_timeout) {
-            clearTimeout(this._expire_timeout);
-            delete this._expire_timeout;
-            this._expire();
-        } else {
-            this._expire_delay = 0;
-        }
-
+    _check_now() {
         if (this._check_timeout) {
             clearTimeout(this._check_timeout);
             delete this._check_timeout;
@@ -171,6 +163,21 @@ class QlobberPG extends EventEmitter {
         } else {
             this._check_delay = 0;
         }
+    }
+
+    refresh_now() {
+        if (this._expire_timeout) {
+            clearTimeout(this._expire_timeout);
+            delete this._expire_timeout;
+            this._expire();
+        } else {
+            this._expire_delay = 0;
+        }
+        this._check_now();
+    }
+
+    force_refresh() { // qlobber-fsq compatibility
+        this.refresh_now();
     }
 
     _expire() {
@@ -501,30 +508,6 @@ class QlobberPG extends EventEmitter {
             return this._message_queue.push(payload, cb);
         }
         cb();
-    }
-
-    _json_message(msg) {
-        const { f1: id, f2: single } = JSON.parse(msg.payload);
-        if (!this._should_handle_message({ id, single })) {
-            return;
-        }
-        this._queue.push(cb => {
-            if (this._chkstop()) {
-                return cb();
-            }
-            this._client.query('SELECT * FROM messages WHERE ((id = $1) AND (expires > NOW()))', [
-                id
-            ], cb);
-        }, (err, r) => {
-            if (this._chkstop()) {
-                return;
-            }
-            if (!this._warning(err)) {
-                for (let msg of r.rows) {
-                    this._message_queue.push(msg, () => {});
-                }
-            }
-        });
     }
 
     stop(cb) {
