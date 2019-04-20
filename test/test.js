@@ -62,6 +62,11 @@ describe('qlobber-pq', function () {
         ], cb), iferr(cb, r => cb(null, r.rows[0].exists)));
     }
 
+    function count(qpg, cb) {
+        qpg._queue.push(cb => qpg._client.query('SELECT id FROM messages', cb),
+                        iferr(cb, r => cb(null, r.rows.length)));
+    }
+
     it('should subscribe and publish to a simple topic', function (done) {
         let pub_info, sub_info;
 
@@ -1286,8 +1291,8 @@ describe('qlobber-pq', function () {
                         }, iferr(done, () => {
                             setTimeout(() => {
                                 each(qpgs, (qpg, next) => {
-                                    qpg._queue.push(cb => qpg._client.query('SELECT id FROM messages', cb), iferr(next, r => {
-                                        expect(r.rows.length).to.equal(0);
+                                    count(qpg, iferr(done, n => {
+                                        expect(n).to.equal(0);
                                         qpg.stop(next);
                                     }));
                                 }, done);
@@ -1296,6 +1301,21 @@ describe('qlobber-pq', function () {
                     }, 2000);
                 }));
             }));
+        }));
+    });
+
+    it('should clear up expired message while worker has it locked', function (done) {
+        this.timeout(60000);
+
+        qpg.subscribe('foo', function (data, info, cb) {
+            setTimeout(() => {
+                count(qpg, iferr(done, n => {
+                    expect(n).to.equal(0);
+                    cb(null, done);
+                }));
+            }, 15000);
+        }, iferr(done, () => {
+            qpg.publish('foo', 'bar', { single: true, ttl: 5000 }, iferr(done, () => {}));
         }));
     });
 });
