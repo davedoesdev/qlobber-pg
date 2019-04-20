@@ -1212,4 +1212,50 @@ describe('qlobber-pq', function () {
             });
         }));
     });
+
+    it('should by able to read more than one message at a time', function (done) {
+        this.timeout(120000);
+
+        after_each(iferr(done, () => {
+            before_each(iferr(done, () => {
+                let in_call = 0;
+                let count = 0;
+
+                function handler(stream, info, cb) {
+                    expect(in_call).to.be.at.most(1);
+                    ++in_call;
+                    ++count;
+                    console.log(count);
+
+                    stream.on('end', function () {
+                        --in_call;
+                        cb(null, (count === 25) && (in_call === 0) ? done : null);
+                    });
+
+                    if (count === 25) {
+                        return stream.on('data', () => {});
+                    }
+
+                    // Give time for other reads to start.
+                    setTimeout(() => {
+                        stream.on('data', () => {});
+                    }, 5 * 1000);
+                }
+                handler.accept_stream = true;
+
+                qpg.subscribe('foo', handler, iferr(done, () => {
+                    for (let i = 0; i < 25; ++i) {
+                        qpg.publish('foo', 'bar', {
+                            ttl: 2 * 60 * 1000,
+                            single: true
+                        }, iferr(done, () => {}));
+                    }
+                }));
+            }), {
+                poll_interval: 10 * 1000,
+                notify: false,
+                message_concurrency: 2
+            });
+        }));
+    });
 });
