@@ -88,6 +88,7 @@ class QlobberPG extends EventEmitter {
         };
 
         this._client = new Client(this._db);
+        this._client.on('error', this.emit.bind(this, 'error'));
 
         if (options.notify !== false) {
             this._client.on('notification', msg => {

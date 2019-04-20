@@ -1318,4 +1318,20 @@ describe('qlobber-pq', function () {
             qpg.publish('foo', 'bar', { single: true, ttl: 5000 }, iferr(done, () => {}));
         }));
     });
+
+    it('should emit an error event if an error occurs before a start event', function (done) {
+        after_each(iferr(done, () => {
+            const qpg = make_qpg();
+            const orig_query = qpg._client.query;
+            qpg._client.query = function (...args) {
+                const cb = args[args.length - 1];
+                cb(new Error('dummy error'));
+            };
+            qpg.on('error', function (err) {
+                expect(err.message).to.equal('dummy error');
+                qpg._client.query = orig_query;
+                qpg.stop(done);
+            });
+        }));
+    });
 });
