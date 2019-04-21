@@ -1363,4 +1363,30 @@ describe('qlobber-pq', function () {
 
         s.emit('error', new Error('dummy error'));
     });
+
+    it('should support disabling work queue (single messages)', function (done) {
+        this.timeout(20000);
+
+        after_each(iferr(done, () => {
+            before_each(iferr(done, () => {
+                let called = false;
+                qpg.subscribe('foo', function (data, info, cb) {
+                    expect(info.topic).to.equal('foo');
+                    expect(data.toString()).to.equal('bar');
+                    expect(info.single).to.be.false;
+                    called = true;
+                }, iferr(done, () => {
+                    qpg.publish('foo', 'bar');
+                    qpg.publish('foo', 'bar', { single: true });
+                }))
+                setTimeout(() => {
+                    expect(called).to.be.true;
+                    done();
+                }, 10000);
+            }), {
+                single: false
+            });
+        }));
+
+    });
 });

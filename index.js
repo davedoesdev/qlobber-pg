@@ -39,6 +39,7 @@ class QlobberPG extends EventEmitter {
         this._expire_interval = options.expire_interval || (10 * 1000) // 10s
         this._check_interval = options.poll_interval || (1 * 1000) // 1s
         this._do_dedup = options.dedup === undefined ? true : options.dedup;
+        this._do_single = options.single === undefined ? true : options.single;
 
         this._topics = new Map();
         this._deferred = new Set();
@@ -498,10 +499,10 @@ class QlobberPG extends EventEmitter {
     _should_handle_message(payload) {
         if (payload.id > this._last_id) {
             this._last_id = payload.id;
-            return true;
+            return !payload.single || this._do_single;
         }
 
-        return payload.single;
+        return payload.single && this._do_single;
     }
 
     _message(payload, deferred, cb) {
