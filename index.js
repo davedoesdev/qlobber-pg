@@ -13,7 +13,7 @@ const escape = require('pg-escape');
 
 class CollectStream extends Writable {
     constructor() {
-        super();
+        super({ autoDestroy: true });
         this._chunks = [];
         this._len = 0;
         this.on('finish', () => {
@@ -637,10 +637,15 @@ class QlobberPG extends EventEmitter {
         }
 
         options = options || {};
-        cb = cb || this._warning.bind(this);
+        const cb2 = (err, ...args) => {
+            this._warning(err);
+            if (cb) {
+                cb.call(this, err, ...args);
+            }
+        };
 
         this._matcher.add(topic, handler);
-        this._update_trigger(cb);
+        this._update_trigger(cb2);
     }
 
     unsubscribe(topic, handler, cb) {
@@ -650,7 +655,12 @@ class QlobberPG extends EventEmitter {
             handler = undefined;
         }
 
-        cb = cb || this._warning.bind(this);
+        const cb2 = (err, ...args) => {
+            this._warning(err);
+            if (cb) {
+                cb.call(this, err, ...args);
+            }
+        };
 
         if (topic === undefined) {
             this._matcher.clear();
@@ -660,7 +670,7 @@ class QlobberPG extends EventEmitter {
             this._matcher.remove(topic, handler);
         }
 
-        this._update_trigger(cb);
+        this._update_trigger(cb2);
     }
 
     publish(topic, payload, options, cb) {
@@ -715,7 +725,17 @@ class QlobberPG extends EventEmitter {
         }
 
         const s = new CollectStream();
-        s.on('buffer', insert);
+
+        s.once('buffer', insert);
+
+        s.once('error', function (err) {
+            this.removeListener('buffer', insert);
+            this.once('close', () => {
+                cb2(err);
+            });
+            this.end();
+        });
+
         return s;
     }
 }

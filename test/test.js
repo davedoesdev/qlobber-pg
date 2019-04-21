@@ -1334,4 +1334,33 @@ describe('qlobber-pq', function () {
             });
         }));
     });
+
+    it('should pass back write errors when publishing', function (done) {
+        orig_query = qpg._client.query;
+        qpg._client.query = function (...args) {
+            const cb = args[args.length - 1];
+            cb(new Error('dummy error'));
+        };
+        qpg.publish('foo', 'bar', err => {
+            expect(err.message).to.equal('dummy error');
+            qpg._client.query = orig_query;
+            done();
+        });
+    });
+
+    it('should close stream if error occurs when publishing', function (done) {
+        let finished = false;
+
+        const s = qpg.publish('foo', err => {
+            expect(err.message).to.equal('dummy error');
+            expect(finished).to.be.true;
+            done();
+        });
+
+        s.on('prefinish', () => {
+            finished = true;
+        });
+
+        s.emit('error', new Error('dummy error'));
+    });
 });
