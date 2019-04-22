@@ -1267,7 +1267,7 @@ describe('qlobber-pq', function () {
     it('should clear up expired messages', function (done) {
         this.timeout(120000);
 
-        const num_queues = 99; // max is 100, leave 1 in case pgadmin3 running
+        const num_queues = 100; // default max 100, remember to close pgadmin3
         const num_messages = 500;
 
         after_each(iferr(done, () => {
@@ -1365,7 +1365,7 @@ describe('qlobber-pq', function () {
     });
 
     it('should support disabling work queue (single messages)', function (done) {
-        this.timeout(20000);
+        this.timeout(5000);
 
         after_each(iferr(done, () => {
             before_each(iferr(done, () => {
@@ -1382,7 +1382,7 @@ describe('qlobber-pq', function () {
                 setTimeout(() => {
                     expect(called).to.be.true;
                     done();
-                }, 10000);
+                }, 3000);
             }), {
                 single: false
             });

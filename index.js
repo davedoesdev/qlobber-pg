@@ -215,7 +215,7 @@ class QlobberPG extends EventEmitter {
             if (!test) {
                 return cb(null, { rows: [] });
             }
-            this._client.query(`SELECT * FROM messages AS NEW WHERE (${test})`, cb);
+            this._client.query(`SELECT * FROM messages AS NEW WHERE (${test}) ORDER BY id`, cb);
         }, (err, r) => {
             if (this._chkstop()) {
                 return;
