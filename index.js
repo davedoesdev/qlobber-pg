@@ -11,6 +11,11 @@ const escape = require('pg-escape');
 // Events
 // Tests from qlobber-fsq
 
+// Note: Publish topics should be restricted to A-Za-z0-9_
+//       (ltree will error otherwise)
+//       Subscriptions should be restricted A-Za-z0-9_*#
+//       (qlobber-pg will error otherwise)
+
 class CollectStream extends Writable {
     constructor() {
         super({ autoDestroy: true });
@@ -631,6 +636,18 @@ class QlobberPG extends EventEmitter {
         }, cb);
     }
 
+    _valid_stopic(topic, cb) {
+        for (let label of topic.split('.')) {
+            if ((label !== '*') &&
+                (label !== '#') &&
+                !/^[A-Za-z0-9_]+$/.test(label)) {
+                cb(new Error('invalid subscription topic: ' + topic));
+                return false;
+            }
+        }
+        return true;
+    }
+
     subscribe(topic, handler, options, cb) {
         if (typeof options === 'function') {
             cb = options;
@@ -644,6 +661,10 @@ class QlobberPG extends EventEmitter {
                 cb.call(this, err, ...args);
             }
         };
+
+        if (!this._valid_stopic(topic, cb)) {
+            return;
+        }
 
         this._matcher.add(topic, handler);
         this._update_trigger(cb2);
@@ -665,10 +686,15 @@ class QlobberPG extends EventEmitter {
 
         if (topic === undefined) {
             this._matcher.clear();
-        } else if (handler === undefined) {
-            this._matcher.remove(topic);
         } else {
-            this._matcher.remove(topic, handler);
+            if (!this._valid_stopic(topic, cb2)) {
+                return;
+            }
+            if (handler === undefined) {
+                this._matcher.remove(topic);
+            } else {
+                this._matcher.remove(topic, handler);
+            }
         }
 
         this._update_trigger(cb2);
@@ -704,6 +730,7 @@ class QlobberPG extends EventEmitter {
             if (this._chkstop()) {
                 return cb2(new Error('stopped'));
             }
+            // Note: ltree will validate topic (maxlen 255) to A-Za-z0-9_
             this._queue.push(cb => this._client.query("INSERT INTO messages(topic, expires, single, data) VALUES($1, $2, $3, decode($4::text, 'hex'))", [
                 topic,
                 new Date(expires),

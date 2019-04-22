@@ -1387,6 +1387,65 @@ describe('qlobber-pq', function () {
                 single: false
             });
         }));
-
     });
+
+    it('should error when publishing to a topic with an invalid character', function (done) {
+        qpg.publish('\0foo', 'bar', err => {
+            expect(err.message).to.equal('invalid byte sequence for encoding "UTF8": 0x00');
+            qpg.publish('foo@', 'bar', err => {
+                expect(err.message).to.equal('syntax error at position 3');
+                done();
+            });
+        });
+    });
+
+    it('should error when publishing to a long topic', function (done) {
+        const arr = [];
+        arr.length = 257;
+        qpg.publish(arr.join('a'), 'bar', err => {
+            expect(err.message).to.equal('name of level is too long');
+            done();
+        });
+    });
+
+    it('should not error when publishing to an empty topic', function (done) {
+        qpg.publish('', 'bar', done);
+    });
+
+    it('should error when subscribing to a topic with an invalid character', function (done) {
+        qpg.subscribe('foo@', () => {}, err => {
+            expect(err.message).to.equal('invalid subscription topic: foo@');
+            qpg.subscribe('a*.b', () => {}, err => {
+                expect(err.message).to.equal('invalid subscription topic: a*.b');
+                qpg.subscribe('a..b', () => {}, err => {
+                    // ltree doesn't allow it either
+                    expect(err.message).to.equal('invalid subscription topic: a..b');
+                    qpg.subscribe('', () => {}, err => {
+                        // ltree doesn't allow it either
+                        expect(err.message).to.equal('invalid subscription topic: ');
+                        done();
+                    });
+                });
+            });
+        });
+    });
+
+    it('should error when unsubscribing to a topic with an invalid character', function (done) {
+        qpg.unsubscribe('foo@', () => {}, err => {
+            expect(err.message).to.equal('invalid subscription topic: foo@');
+            qpg.unsubscribe('a*.b', () => {}, err => {
+                expect(err.message).to.equal('invalid subscription topic: a*.b');
+                qpg.unsubscribe('a..b', () => {}, err => {
+                    // ltree doesn't allow it either
+                    expect(err.message).to.equal('invalid subscription topic: a..b');
+                    qpg.unsubscribe('', undefined, err => {
+                        // ltree doesn't allow it either
+                        expect(err.message).to.equal('invalid subscription topic: ');
+                        done();
+                    });
+                });
+            });
+        });
+    });
+
 });
