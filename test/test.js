@@ -9,6 +9,22 @@ const wu = require('wu');
 const config = require('config');
 const iferr = require('iferr');
 
+function read_all(s, cb) {
+    const bufs = [];
+
+    s.on('end', () => cb(Buffer.concat(bufs)));
+
+    s.on('readable', function () {
+        while (true) {
+            const data = this.read();
+            if (data === null) {
+                break;
+            }
+            bufs.push(data);
+        }
+    });
+}
+
 describe('qlobber-pq', function () {
     let qpg;
     let random_hash;
@@ -1446,6 +1462,40 @@ describe('qlobber-pq', function () {
                 });
             });
         });
+    });
+
+    it('should support handler concurrency', function (done) {
+        after_each(iferr(done, () => {
+            before_each(iferr(done, () => {
+                const streams = [];
+
+                function handler(s, info) {
+                    streams.push(s);
+
+                    if (streams.length === 1) {
+                        this.publish('foo', 'bar2', iferr(done, () => {}));
+                    } else if (streams.length === 2) {
+                        read_all(streams[0], v => {
+                            expect(v.toString()).to.equal('bar');
+                            read_all(streams[1], v => {
+                                expect(v.toString()).to.equal('bar2');
+                                done();
+                            });
+                        });
+                    } else {
+                        done(new Error('called too many times'));
+                    }
+                }
+                handler.accept_stream = true;
+
+                qpg.subscribe('foo', handler, iferr(done, () => {
+                    qpg.publish('foo', 'bar', iferr(done, () => {}));
+                }));
+            }), {
+                handler_concurrency: 2
+            });
+        }));
+
     });
 
 });
