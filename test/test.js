@@ -1556,4 +1556,26 @@ describe('qlobber-pq', function () {
             });
         }));
     });
+
+    it.only('should support error on stream and calling back', function (done) {
+        let count = 0;
+
+        qpg.on('warning', err => {
+            expect(err.message).to.equal('dummy');
+            ++count;
+        });
+
+        function handler(stream, info, cb) {
+            stream.emit('error', new Error('dummy'));
+            cb(new Error('dummy'), iferr(done, () => {
+                expect(count).to.equal(2);
+                done();
+            }));
+        }
+        handler.accept_stream = true;
+
+        qpg.subscribe('foo', handler, iferr(done, () => {
+            qpg.publish('foo', { single: true }).end('bar');
+        }));
+    });
 });
