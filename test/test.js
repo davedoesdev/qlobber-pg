@@ -1557,7 +1557,7 @@ describe('qlobber-pq', function () {
         }));
     });
 
-    it.only('should support error on stream and calling back', function (done) {
+    it('should support error on stream and calling back', function (done) {
         let count = 0;
 
         qpg.on('warning', err => {
