@@ -45,6 +45,7 @@ class QlobberPG extends EventEmitter {
         this._check_interval = options.poll_interval || (1 * 1000) // 1s
         this._do_dedup = options.dedup === undefined ? true : options.dedup;
         this._do_single = options.single === undefined ? true : options.single;
+        this._order_by_expiry = options.order_by_expiry;
 
         this._topics = new Map();
         this._deferred = new Set();
@@ -215,7 +216,7 @@ class QlobberPG extends EventEmitter {
             if (!test) {
                 return cb(null, { rows: [] });
             }
-            this._client.query(`SELECT * FROM messages AS NEW WHERE (${test}) ORDER BY id`, cb);
+            this._client.query(`SELECT * FROM messages AS NEW WHERE (${test}) ORDER BY ${this._order_by_expiry ? 'expires' : 'id'}`, cb);
         }, (err, r) => {
             if (this._chkstop()) {
                 return;
@@ -235,9 +236,14 @@ class QlobberPG extends EventEmitter {
                         done();
                     }
                 };
+                let next_id = this._last_id;
                 for (let msg of r.rows) {
+                    if (msg.id > next_id) {
+                        next_id = msg.id;
+                    }
                     this._message(msg, deferred.has(msg.id), check);
                 }
+                this._last_id = next_id;
             }
         });
     }
@@ -503,7 +509,6 @@ class QlobberPG extends EventEmitter {
 
     _should_handle_message(payload) {
         if (payload.id > this._last_id) {
-            this._last_id = payload.id;
             return !payload.single || this._do_single;
         }
 

@@ -1495,7 +1495,65 @@ describe('qlobber-pq', function () {
                 handler_concurrency: 2
             });
         }));
-
     });
 
+    it('should support delivering messages in expiry order', function (done) {
+        this.timeout(30000);
+
+        after_each(iferr(done, () => {
+            before_each(iferr(done, () => {
+                const n = 1000;
+                const ttls_out = [];
+                const ttls_in = [];
+                const expiries_in = [];
+
+                // Need to leave enough time between ttls to account for time
+                // increasing while publishing
+                for (let i = 0; i < n; ++i) {
+                    ttls_out.push(Math.round(
+
+                    Math.random() * 18 * 60 // random mins up to 18 hour period
+                    + 1 * 60)               // plus one hour
+
+                    * 60 * 1000);           // convert to milliseconds
+                }
+
+                function num_sort(x, y) {
+                    return x - y;
+                }
+
+                qpg.subscribe('foo', function (data, info) {
+                    ttls_in.push(parseInt(data.toString()));
+                    expiries_in.push(info.expires);
+
+                    if (ttls_in.length === n) {
+                        // check expiries are actually in ascending order
+                        const sorted_expiries_in = expiries_in.concat();
+                        sorted_expiries_in.sort(num_sort);
+                        expect(expiries_in).to.eql(sorted_expiries_in);
+
+                        // check messages are in expected order
+                        ttls_out.sort(num_sort);
+                        expect(ttls_in).to.eql(ttls_out);
+
+                        done();
+                    } else if (ttls_in.length > n) {
+                        done(new Error('called too many times'));
+                    }
+                }, iferr(done, () => {
+                    eachSeries(ttls_out, (ttl, cb) => {
+                        qpg.publish('foo', ttl.toString(), { ttl: ttl }, cb);
+                    }, iferr(done, () => {
+                        expect(ttls_in.length).to.equal(0);
+                        qpg.refresh_now();
+                    }));
+                }));
+            }), {
+                poll_interval: 60 * 60 * 1000,
+                notify: false,
+                order_by_expiry: true,
+                multi_ttl: 24 * 60 * 60 * 1000
+            });
+        }));
+    });
 });
