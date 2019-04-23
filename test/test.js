@@ -1578,4 +1578,72 @@ describe('qlobber-pq', function () {
             qpg.publish('foo', { single: true }).end('bar');
         }));
     });
+
+    it('should support calling back before stream has ended', function (done) {
+        let count = 0;
+
+        function handler(stream, info, cb) {
+            if (++count === 2) {
+                cb(null, done);
+            } else {
+                cb();
+            }
+        }
+        handler.accept_stream = true;
+
+        qpg.subscribe('foo', handler, iferr(done, () => {
+            qpg.publish('foo', iferr(done, () => {})).end('bar');
+            qpg.publish('foo', { single: true }, iferr(done, () => {})).end('bar');
+        }));
+    });
+
+    it('should end/error stream after called back before stream has ended', function (done) {
+        let count = 0;
+
+        function handler(stream, info, cb) {
+            stream.on('readable', function () {
+                const data = this.read();
+                // This is different to qlobber-fsq file streams as they
+                // don't push data initially and so data would be null.
+                expect(data.toString()).to.equal('bar');
+            });
+
+            if (++count === 2) {
+                stream.on('end', done);
+                cb();
+            } else {
+                let ended = false;
+                let closed = false;
+                let msg;
+
+                stream.on('end', function () {
+                    ended = true;
+                });
+
+                stream.on('close', function () {
+                    closed = true;
+                });
+
+                stream.on('error', function (err) {
+                    msg = err.message;
+                });
+
+                cb(new Error('dummy'), iferr(done, () => {
+                    // We're in a nextTick here so close has been emitted
+                    expect(closed).to.be.true;
+                    expect(msg).to.equal('dummy');
+                    process.nextTick(function () {
+                        // end emitted in another nextTick
+                        expect(ended).to.be.true;
+                        qpg.publish('foo', { single: true }, iferr(done, () => {})).end('bar');
+                    });
+                }));
+            }
+        }
+        handler.accept_stream = true;
+
+        qpg.subscribe('foo', handler, iferr(done, () => {
+            qpg.publish('foo', iferr(done, () => {})).end('bar');
+        }));
+    });
 });
