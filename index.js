@@ -55,15 +55,17 @@ class QlobberPG extends EventEmitter {
             this.filters = [this.filters];
         }
 
-        const qoptions = Object.assign({
+        this._matcher_options = Object.assign({
             cache_adds: this._topics
         }, options);
 
         if (this._do_dedup) {
-            this._matcher = new QlobberDedup(qoptions);
+            this._matcher = new QlobberDedup(this._matcher_options);
         } else {
-            this._matcher = new Qlobber(qoptions);
+            this._matcher = new Qlobber(this._matcher_options);
         }
+
+        this._matcher_marker = {};
 
         this._queue = queue((task, cb) => task(cb));
 
@@ -224,6 +226,8 @@ class QlobberPG extends EventEmitter {
             if (!this._warning(err)) {
                 const deferred = this._deferred;
                 this._deferred = new Set();
+                const extra_matcher = this._extra_matcher;
+                delete this._extra_matcher;
                 const done = () => {
                     this._check_timeout = setTimeout(this._check.bind(this), this._check_delay);
                 };
@@ -241,7 +245,7 @@ class QlobberPG extends EventEmitter {
                     if (msg.id > next_id) {
                         next_id = msg.id;
                     }
-                    this._message(msg, deferred.has(msg.id), check);
+                    this._message(msg, deferred, extra_matcher, check);
                 }
                 this._last_id = next_id;
             }
@@ -484,11 +488,19 @@ class QlobberPG extends EventEmitter {
     }
 
     _handle_message(payload, cb) {
-        const handlers = this._matcher.match(payload.topic);
+        const handlers = payload.has_extra_handlers ?
+            payload.extra_handlers :this._matcher.match(payload.topic);
+
         this._filter(payload, handlers, (err, ready, handlers) => {
             this._warning(err);
             if (!ready) {
                 this._deferred.add(payload.id);
+                if (payload.has_extra_handlers) {
+                    // Remember handlers for existing messages
+                    const em = this._ensure_extra_matcher();
+                    em._extra_handlers.set(payload.id, payload.extra_handlers);
+                    em._matcher_markers.set(payload.id, payload.matcher_marker);
+                }
                 return cb();
             }
             if (payload.single) {
@@ -508,17 +520,76 @@ class QlobberPG extends EventEmitter {
     }
 
     _should_handle_message(payload) {
-        if (payload.id > this._last_id) {
+        if (payload.expires <= Date.now()) {
+            return false;
+        }
+
+        if (!payload.existing) {
             return !payload.single || this._do_single;
         }
 
         return payload.single && this._do_single;
     }
 
-    _message(payload, deferred, cb) {
-        if (deferred || this._should_handle_message(payload)) {
+    _set_extra(payload, extra_matcher, prev_extra_handlers) {
+        let extra_handlers = extra_matcher.match(payload.topic);
+        let has_extra_handlers = (this._do_dedup ?
+            extra_handlers.size : extra_handlers.length) > 0;
+        if (prev_extra_handlers) {
+            // We had handlers to receive this as an existing message
+            if ((extra_matcher._matcher_markers.get(payload.id) ===
+                 this._matcher_marker) &&
+                !has_extra_handlers) {
+                // No unsubscribe happened and no new handlers
+                extra_handlers = prev_extra_handlers;
+                has_extra_handlers = true;
+            } else {
+                // Add previous handlers to new ones
+                const handlers = this._matcher.match(payload.topic);
+                for (let h of prev_extra_handlers) {
+                    if (this._do_dedup) {
+                        if (handlers.has(h)) {
+                            extra_handlers.add(h);
+                        }
+                    } else if (handlers.indexOf(h) >= 0) {
+                        extra_handlers.push(h);
+                    }
+                }
+                has_extra_handlers = (this._do_dedup ?
+                    extra_handlers.size : extra_handlers.length) > 0;
+            }
+            extra_matcher._extra_handlers.delete(payload.id);
+            extra_matcher._matcher_markers.delete(payload.id);
+        }
+        // We'll call handlers for existing message
+        payload.extra_handlers = extra_handlers;
+        payload.has_extra_handlers = has_extra_handlers;
+        // If any message is delayed by filter, remember marker so we know if
+        // any unsubscribe happened
+        payload.matcher_marker = this._matcher_marker;
+    }
+
+    _message(payload, deferred, extra_matcher, cb) {
+        if (payload.id <= this._last_id) {
+            payload.existing = true;
+        }
+
+        const is_deferred = deferred.has(payload.id);
+
+        if (payload.existing && extra_matcher && !payload.single) {
+            const prev_extra_handlers =
+                extra_matcher._extra_handlers.get(payload.id);
+            if (prev_extra_handlers || !is_deferred) {
+                this._set_extra(payload, extra_matcher, prev_extra_handlers);
+            }
+        }
+
+        if (is_deferred ||
+            payload.has_extra_handlers ||
+            this._should_handle_message(payload)) {
             return this._message_queue.push(payload, cb);
         }
+
         cb();
     }
 
@@ -599,29 +670,35 @@ class QlobberPG extends EventEmitter {
                     .replace(/(^|\.)#($|\.)/, '$1*$2');
     }
 
+    _or_topics(topics) {
+        return `(${Array.from(topics.keys()).map(t => escape('(NEW.topic ~ %L)', this._ltreeify(t))).join(' OR ')})`;
+    }
+
+    _maybe_or(s, t) {
+        return s ? `(${s} OR ${t})` : t;
+    }
+
     _topics_test(check) {
         const topics = this._topics;
-        if (topics.size === 0) {
-            if (!check || this._deferred.size == 0) {
-                return null;
-            }
+        const extra_topics = this._extra_matcher &&
+                             this._extra_matcher._extra_topics;
+        if ((topics.size === 0) &&
+            (!check || ((this._deferred.size === 0) &&
+                        (!extra_topics || extra_topics.size === 0)))) {
+            return null;
         }
         let r = '';
         if (topics.size > 0) {
-            r = `(${Array.from(topics.keys()).map(t => escape('(NEW.topic ~ %L)', this._ltreeify(t))).join(' OR ')})`;
+            r = this._or_topics(topics);
             if (check) {
                 r = `((${r}) AND ((NEW.id > ${this._last_id}) OR NEW.single))`;
             }
         }
         if (check && (this._deferred.size > 0)) {
-            const bracket = r;
-            if (bracket) {
-                r = `(${r} OR `;
-            }
-            r = `${r}(${Array.from(this._deferred).map(id => escape('(NEW.id = %L)', String(id))).join(' OR ')})`;
-            if (bracket) {
-                r = `${r})`;
-            }
+            r = this._maybe_or(r, `(${Array.from(this._deferred).map(id => escape('(NEW.id = %L)', String(id))).join(' OR ')})`);
+        }
+        if (check && extra_topics && (extra_topics.size > 0)) {
+            r = this._maybe_or(r, this._or_topics(extra_topics));
         }
         return `(${r} AND (NEW.expires > NOW()))`;
     }
@@ -653,6 +730,28 @@ class QlobberPG extends EventEmitter {
         return true;
     }
 
+    _ensure_extra_matcher() {
+        if (!this._extra_matcher) {
+            const extra_topics = new Map();
+
+            const matcher_options = Object.assign(this._matcher_options, {
+                cache_adds: extra_topics
+            });
+
+            if (this._do_dedup) {
+                this._extra_matcher = new QlobberDedup(matcher_options);
+            } else {
+                this._extra_matcher = new Qlobber(matcher_options);
+            }
+
+            this._extra_matcher._extra_topics = extra_topics;
+            this._extra_matcher._extra_handlers = new Map();
+            this._extra_matcher._matcher_markers = new Map();
+        }
+
+        return this._extra_matcher;
+    }
+
     subscribe(topic, handler, options, cb) {
         if (typeof options === 'function') {
             cb = options;
@@ -672,6 +771,11 @@ class QlobberPG extends EventEmitter {
         }
 
         this._matcher.add(topic, handler);
+
+        if (options.subscribe_to_existing) {
+            this._ensure_extra_matcher().add(topic, handler);
+        }
+
         this._update_trigger(cb2);
     }
 

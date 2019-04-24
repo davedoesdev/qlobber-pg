@@ -1646,4 +1646,45 @@ describe('qlobber-pq', function () {
             qpg.publish('foo', iferr(done, () => {})).end('bar');
         }));
     });
+
+    function existing_messages(dedup) {
+        describe(`dedup=${dedup}`, function () {
+            this.timeout(20000);
+
+            it('should support delivering existing messages to subscribers', function (done) {
+                after_each(iferr(done, () => {
+                    before_each(iferr(done, () => {
+                        qpg.subscribe('foo', function (data, info) {
+                            expect(info.existing).to.be.undefined;
+                            expect(data.toString()).to.equal('bar');
+                            expect(info.topic).to.equal('foo');
+
+                            setTimeout(() => {
+                                qpg.subscribe('foo', function (data2, info2) {
+                                    expect(info.existing).to.be.undefined;
+                                    expect(info2.existing).to.be.true;
+                                    expect(data2.toString()).to.equal('bar');
+                                    expect(info2.topic).to.equal('foo');
+                                    expect(info2.id).to.equal(info.id);
+                                    done();
+                                }, {
+                                    subscribe_to_existing: true
+                                }, iferr(done, () => {}));
+                            }, 500);
+                        }, iferr(done, () => {
+                            qpg.publish('foo', iferr(done, () => {})).end('bar');
+                        }));
+                    }), {
+                        ttl: 10000,
+                        dedup
+                    });
+                }));
+            });
+        });
+    }
+
+    describe('existing messages', function () {
+        existing_messages(true);
+        existing_messages(false);
+    });
 });
