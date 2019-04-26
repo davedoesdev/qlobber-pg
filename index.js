@@ -7,7 +7,6 @@ const { Qlobber, QlobberDedup } = require('qlobber');
 const escape = require('pg-escape');
 
 // TODO:
-// Existing messages and 'existing' property in info
 // Events
 // Tests from qlobber-fsq
 
@@ -276,11 +275,15 @@ class QlobberPG extends EventEmitter {
         next(0)(null, true, handlers);
     }
 
+    _num_handlers(handlers) {
+        return this._do_dedup ? handlers.size : handlers.length;
+    }
+
     _call_handlers2(handlers, info, cb) {
         let called = false;
         let done_err = null;
         let waiting = [];
-        const len = this._do_dedup ? handlers.size : handlers.length;
+        const len = this._num_handlers(handlers);
 
         const done = err => {
             this._warning(err);
@@ -489,7 +492,7 @@ class QlobberPG extends EventEmitter {
 
     _handle_message(payload, cb) {
         const handlers = payload.has_extra_handlers ?
-            payload.extra_handlers :this._matcher.match(payload.topic);
+            payload.extra_handlers : this._matcher.match(payload.topic);
 
         this._filter(payload, handlers, (err, ready, handlers) => {
             this._warning(err);
@@ -519,22 +522,9 @@ class QlobberPG extends EventEmitter {
         });
     }
 
-    _should_handle_message(payload) {
-        if (payload.expires <= Date.now()) {
-            return false;
-        }
-
-        if (!payload.existing) {
-            return !payload.single || this._do_single;
-        }
-
-        return payload.single && this._do_single;
-    }
-
     _set_extra(payload, extra_matcher, prev_extra_handlers) {
         let extra_handlers = extra_matcher.match(payload.topic);
-        let has_extra_handlers = (this._do_dedup ?
-            extra_handlers.size : extra_handlers.length) > 0;
+        let has_extra_handlers = this._num_handlers(extra_handlers) > 0;
         if (prev_extra_handlers) {
             // We had handlers to receive this as an existing message
             if ((extra_matcher._matcher_markers.get(payload.id) ===
@@ -555,8 +545,7 @@ class QlobberPG extends EventEmitter {
                         extra_handlers.push(h);
                     }
                 }
-                has_extra_handlers = (this._do_dedup ?
-                    extra_handlers.size : extra_handlers.length) > 0;
+                has_extra_handlers = this._num_handlers(extra_handlers) > 0;
             }
             extra_matcher._extra_handlers.delete(payload.id);
             extra_matcher._matcher_markers.delete(payload.id);
@@ -570,6 +559,10 @@ class QlobberPG extends EventEmitter {
     }
 
     _message(payload, deferred, extra_matcher, cb) {
+        if (payload.expires <= Date.now()) {
+            return cb();
+        }
+
         if (payload.id <= this._last_id) {
             payload.existing = true;
         }
@@ -579,18 +572,25 @@ class QlobberPG extends EventEmitter {
         if (payload.existing && extra_matcher && !payload.single) {
             const prev_extra_handlers =
                 extra_matcher._extra_handlers.get(payload.id);
+
             if (prev_extra_handlers || !is_deferred) {
                 this._set_extra(payload, extra_matcher, prev_extra_handlers);
+
+                if (!payload.has_extra_handlers) {
+                    return cb();
+                }
+            }
+        } else if (!is_deferred) {
+            if (payload.existing) {
+                if (!payload.single || !this._do_single) {
+                    return cb();
+                }
+            } else if (payload.single && !this._do_single) {
+                return cb();
             }
         }
 
-        if (is_deferred ||
-            payload.has_extra_handlers ||
-            this._should_handle_message(payload)) {
-            return this._message_queue.push(payload, cb);
-        }
-
-        cb();
+        return this._message_queue.push(payload, cb);
     }
 
     stop(cb) {
@@ -795,16 +795,27 @@ class QlobberPG extends EventEmitter {
 
         if (topic === undefined) {
             this._matcher.clear();
+            if (this._extra_matcher) {
+                this._extra_matcher.clear();
+            }
         } else {
             if (!this._valid_stopic(topic, cb2)) {
                 return;
             }
             if (handler === undefined) {
                 this._matcher.remove(topic);
+                if (this._extra_matcher) {
+                    this._extra_matcher.remove(topic);
+                }
             } else {
                 this._matcher.remove(topic, handler);
+                if (this._extra_matcher) {
+                    this._extra_matcher.remove(topic, handler);
+                }
             }
         }
+
+        this._matcher_marker = {};
 
         this._update_trigger(cb2);
     }

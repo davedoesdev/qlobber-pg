@@ -371,7 +371,7 @@ describe('qlobber-pq', function () {
                 cb => qpg2.subscribe('foo', (...args) => handler(...args), cb),
                 cb => qpg.publish('foo', 'bar', { single: true }, cb)
             ]);
-        }));
+        }), { name: 'test2' });
     });
 
     it('should put work back on the queue', function (done) {
@@ -642,7 +642,7 @@ describe('qlobber-pq', function () {
                     qpg.publish('foo', 'bar', { single: true }, iferr(done, () => {}));
                 }));
             }));
-        }));
+        }), { name: 'test2' });
     });
 
     it('should allow handlers to delay a message', function (done) {
@@ -693,7 +693,7 @@ describe('qlobber-pq', function () {
         make_qpg(iferr(done, qpg2 => {
             qpg2.stop();
             qpg2.on('stop', done);
-        }));
+        }), { name: 'test2' });
     });
 
     it('should support per-message time-to-live', function (done) {
@@ -745,6 +745,7 @@ describe('qlobber-pq', function () {
                 qpg.publish('foo', 'bar', { single: true }, iferr(done, () => {}));
             }));
         }), {
+            name: 'test2',
             poll_interval: 50
         });
     });
@@ -975,7 +976,7 @@ describe('qlobber-pq', function () {
 
         qpg.publish('foo', 'bar', { single: true }, iferr(done, () => {
             after_each(iferr(done, () => {
-                const qpg = make_qpg();
+                const qpg = make_qpg(null, { name: 'test2' });
                 qpg.subscribe('foo', function (data, info, cb) {
                     cb(null, iferr(done, () => qpg.stop(done)));
                 }, iferr(done, () => {}));
@@ -1337,7 +1338,7 @@ describe('qlobber-pq', function () {
 
     it('should emit an error event if an error occurs before a start event', function (done) {
         after_each(iferr(done, () => {
-            const qpg = make_qpg();
+            const qpg = make_qpg(null, { name: 'test2' });
             const orig_query = qpg._client.query;
             qpg._client.query = function (...args) {
                 const cb = args[args.length - 1];
@@ -1680,11 +1681,313 @@ describe('qlobber-pq', function () {
                     });
                 }));
             });
+
+            it('should support delaying existing messages with filter', function (done) {
+                let count = 0;
+                let called1 = false;
+                let called2 = false;
+
+                function check() {
+                    if (called1 && called2) {
+                        done();
+                    }
+                }
+
+                function filter(info, handlers, cb) {
+                    if (++count === 1) {
+                        // allow through initial pub and sub
+                        cb(null, true, handlers);
+                    } else if (count === 2) {
+                        // delay first existing
+                        cb(null, false);
+                    } else if (count === 3) {
+                        // subscribe again to existing messages
+                        this.subscribe('foo', function (data, info) {
+                            expect(info.existing).to.be.true;
+                            expect(data.toString()).to.equal('bar');
+                            expect(info.topic).to.equal('foo');
+                            called1 = true;
+                            check();
+                        }, {
+                            subscribe_to_existing: true
+                        }, iferr(done, () => {
+                            // and delay again
+                            cb(null, false);
+                        }));
+                    } else {
+                        // allow through existing
+                        cb(null, true, handlers);
+                    }
+                }
+
+                after_each(iferr(done, () => {
+                    before_each(iferr(done, () => {
+                        qpg.subscribe('foo', function (data, info) {
+                            expect(info.existing).to.be.undefined;
+                            expect(data.toString()).to.equal('bar');
+                            expect(info.topic).to.equal('foo');
+
+                            setTimeout(() => {
+                                this.subscribe('foo', function (data2, info2) {
+                                    expect(info.existing).to.be.undefined;
+                                    expect(info2.existing).to.be.true;
+                                    expect(data2.toString()).to.equal('bar');
+                                    expect(info2.topic).to.equal('foo');
+                                    expect(info2.id).to.equal(info.id);
+                                    called2 = true;
+                                    check();
+                                }, {
+                                    subscribe_to_existing: true
+                                }, iferr(done, () => {}));
+                            }, 500);
+                        }, iferr(done, () => {
+                            qpg.publish('foo', iferr(done, () => {})).end('bar');
+                        }));
+                    }), {
+                        ttl: 10000,
+                        dedup,
+                        filter
+                    });
+                }));
+            });
+
+            it('should support delaying existing messages twice', function (done) {
+                let count = 0;
+                let called1 = false;
+                let called2 = false;
+
+                function check() {
+                    if (called1 && called2) {
+                        done();
+                    }
+                }
+
+                function filter(info, handlers, cb) {
+                    if (++count === 1) {
+                        // allow through initial pub and sub
+                        cb(null, true, handlers);
+                    } else if (count === 2) {
+                        // delay first existing
+                        cb(null, false);
+                    } else if (count === 3) {
+                        // subscribe again to existing messages
+                        this.subscribe('foo', function (data, info) {
+                            expect(info.existing).to.be.true;
+                            expect(data.toString()).to.equal('bar');
+                            expect(info.topic).to.equal('foo');
+                            called1 = true;
+                            check();
+                        }, {
+                            subscribe_to_existing: true
+                        }, iferr(done, () => {
+                            // and delay again
+                            cb(null, false);
+                        }));
+                    } else if (count === 4) {
+                        // and delay again
+                        cb(null, false);
+                    } else {
+                        // allow through existing
+                        cb(null, true, handlers);
+                    }
+                }
+
+                after_each(iferr(done, () => {
+                    before_each(iferr(done, () => {
+                        qpg.subscribe('foo', function (data, info) {
+                            expect(info.existing).to.be.undefined;
+                            expect(data.toString()).to.equal('bar');
+                            expect(info.topic).to.equal('foo');
+
+                            setTimeout(() => {
+                                this.subscribe('foo', function (data2, info2) {
+                                    expect(info.existing).to.be.undefined;
+                                    expect(info2.existing).to.be.true;
+                                    expect(data2.toString()).to.equal('bar');
+                                    expect(info2.topic).to.equal('foo');
+                                    expect(info2.id).to.equal(info.id);
+                                    called2 = true;
+                                    check();
+                                }, {
+                                    subscribe_to_existing: true
+                                }, iferr(done, () => {}));
+                            }, 500);
+                        }, iferr(done, () => {
+                            qpg.publish('foo', iferr(done, () => {})).end('bar');
+                        }));
+                    }), {
+                        ttl: 10000,
+                        dedup,
+                        filter
+                    });
+                }));
+            });
+
+            it('should subscribe to new messages too', function (done) {
+                after_each(iferr(done, () => {
+                    before_each(iferr(done, () => {
+                        qpg.subscribe('foo', function (data, info) {
+                            expect(info.existing).to.be.undefined;
+                            expect(data.toString()).to.equal('bar');
+                            expect(info.topic).to.equal('foo');
+                            done();
+                        }, {
+                            subscribe_to_existing: true
+                        }, iferr(done, () => {
+                            qpg.publish('foo', iferr(done, () => {})).end('bar');
+                        }));
+                    }), {
+                        ttl: 10000,
+                        dedup
+                    });
+                }));
+            });
+
+            it('should support unsubscribing from existing messages', function (done) {
+                function handler() {
+                    done(new Error('should not be called'));
+                }
+
+                after_each(iferr(done, () => {
+                    before_each(iferr(done, () => {
+                        qpg.subscribe('foo', function (data, info) {
+                            expect(info.existing).to.be.undefined;
+                            expect(data.toString()).to.equal('bar');
+                            expect(info.topic).to.equal('foo');
+
+                            setTimeout(() => {
+                                this.subscribe('foo', handler, {
+                                    subscribe_to_existing: true
+                                }, iferr(done, () => {
+                                    qpg.unsubscribe('foo', handler, iferr(done, () => {
+                                        setTimeout(done, 1500);
+                                    }));
+                                }));
+                            }, 500);
+                        }, iferr(done, () => {
+                            qpg.publish('foo', iferr(done, () => {})).end('bar');
+                        }));
+                    }), {
+                        ttl: 10000,
+                        dedup
+                    });
+                }));
+            });
+
+            function unsub_delayed_existing(unsub, done) {
+                let count = 0;
+
+                function handler() {
+                    done(new Error('should not be called'));
+                }
+
+                function handler2() {
+                    done(new Error('should not be called'));
+                }
+
+                function filter(info, handlers, cb) {
+                    if (++count === 1) {
+                        // allow through initial pub and sub
+                        cb(null, true, handlers);
+                    } else if (count === 2) {
+                        // delay first existing
+                        cb(null, false);
+                    } else if (count === 3) {
+                        // subscribe again to existing messages
+                        this.subscribe('foo', handler2, {
+                            subscribe_to_existing: true
+                        }, iferr(done, () => {
+                            unsub(handler, handler2, iferr(done, () => {
+                                // and delay again
+                                cb(null, false);
+                                setTimeout(done, 1500);
+                            }));
+                        }));
+                    } else {
+                        // existing message doesn't call filter if there are
+                        // no handlers
+                        done(new Error('called too many times'));
+                    }
+                }
+
+                after_each(iferr(done, () => {
+                    before_each(iferr(done, () => {
+                        qpg.subscribe('foo',  function (data, info) {
+                            expect(info.existing).to.be.undefined;
+                            expect(data.toString()).to.equal('bar');
+                            expect(info.topic).to.equal('foo');
+
+                            setTimeout(() => {
+                                this.subscribe('foo', handler, {
+                                    subscribe_to_existing: true
+                                }, iferr(done, () => {}));
+                            }, 500);
+                        }, iferr(done, () => {
+                            qpg.publish('foo', iferr(done, () => {})).end('bar');
+                        }));
+                    }), {
+                        ttl: 10000,
+                        dedup,
+                        filter
+                    });
+                }));
+            }
+
+            it('should support unsubscribing from delayed existing messages (by handler)', function (done) {
+                unsub_delayed_existing(function (handler, handler2, cb) {
+                    qpg.unsubscribe('foo', handler, iferr(cb, () => {
+                        qpg.unsubscribe('foo', handler2, cb);
+                    }));
+                }, done);
+            });
+
+            it('should support unsubscribing from delayed existing messages (by topic)', function (done) {
+                unsub_delayed_existing(function (handler, handler2, cb) {
+                    qpg.unsubscribe('foo', undefined, cb);
+                }, done);
+            });
+
+            it('should support unsubscribing from delayed existing messages (all)', function (done) {
+                unsub_delayed_existing(function (handler, handler2, cb) {
+                    qpg.unsubscribe(cb);
+                }, done);
+            });
         });
     }
 
     describe('existing messages', function () {
         existing_messages(true);
         existing_messages(false);
+    });
+
+    it('should be able to unsubscribe while message being processed', function (done) {
+        const orig_parse = Date.parse;
+
+        function handler() {
+            done(new Error('should not be called'));
+        }
+
+        Date.parse = function (...args) {
+            Date.parse = orig_parse;
+            
+            qpg.unsubscribe('foo', handler, iferr(done, () => {
+                setImmediate(done);
+                orig_parse.apply(this, args);
+            }));
+        };
+
+        qpg.subscribe('foo', handler, iferr(done, () => {
+            qpg.publish('foo', 'bar', iferr(done, () => {}));
+        }));
+    });
+
+    it('should publish empty message', function (done) {
+        qpg.subscribe('foo', function (data, info) {
+            expect(info.topic).to.equal('foo');
+            expect(data.length).to.equal(0);
+            done();
+        }, iferr(done, () => {
+            qpg.publish('foo', iferr(done, () => {})).end();
+        }));
     });
 });
