@@ -7,7 +7,6 @@ const { Qlobber, QlobberDedup } = require('qlobber');
 const escape = require('pg-escape');
 
 // TODO:
-// Events
 // Tests from qlobber-fsq
 
 // Note: Publish topics should be restricted to A-Za-z0-9_
@@ -666,12 +665,17 @@ class QlobberPG extends EventEmitter {
     }
 
     _ltreeify(topic) {
-        return topic.replace(/(^|\.)(\*)($|\.)/, '$1$2{1}$3')
-                    .replace(/(^|\.)#($|\.)/, '$1*$2');
+        return topic.replace(/(?<=^|\.)(\*)(?=$|\.)/g, '$1{1}')
+                    .replace(/(?<=^|\.)#(?=$|\.)/g, '*');
     }
 
     _or_topics(topics) {
-        return `(${Array.from(topics.keys()).map(t => escape('(NEW.topic ~ %L)', this._ltreeify(t))).join(' OR ')})`;
+        return `(${Array.from(topics.keys()).map(t => {
+            if (t === '') {
+                return "(NEW.topic = '')";
+            }
+            return escape('(NEW.topic ~ %L)', this._ltreeify(t));
+        }).join(' OR ')})`;
     }
 
     _maybe_or(s, t) {
@@ -719,6 +723,9 @@ class QlobberPG extends EventEmitter {
     }
 
     _valid_stopic(topic, cb) {
+        if (topic === '') {
+            return true;
+        }
         for (let label of topic.split('.')) {
             if ((label !== '*') &&
                 (label !== '#') &&
