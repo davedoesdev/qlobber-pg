@@ -1,5 +1,5 @@
 const { randomBytes } = require('crypto');
-const { times, each, queue, parallel } = require('async');
+const { times, each, eachLimit, queue, parallel } = require('async');
 const { QlobberPG } = require('..');
 const { expect } = require('chai');
 const config = require('config');
@@ -210,7 +210,7 @@ function rabbitmq_tests(name, QCons, num_queues, rounds, msglen, retry_prob, exp
 
             q.drain = () => {
                 if (f) {
-                    f(qpgs, subs, assigned, unsubscribe, publish);
+                    f(qpgs, subs, assigned, unsubscribe, iferr(done, publish));
                 } else {
                     publish();
                 }
@@ -224,6 +224,44 @@ function rabbitmq(prefix, QCons, queues, rounds, msglen, retry_prob) {
 
     rabbitmq_tests(prefix + 'before remove', QCons, queues, rounds, msglen, retry_prob, rabbitmq_bindings.expected_results_before_remove);
 
+    rabbitmq_tests(prefix + 'after remove', QCons, queues, rounds, msglen, retry_prob, rabbitmq_bindings.expected_results_after_remove, (qpgs, subs, assigned, unsubscribe, cb) => {
+        eachLimit(rabbitmq_bindings.bindings_to_remove, qpgs.length * 5, (i, next) => {
+            const n = assigned[i - 1];
+            const v = rabbitmq_bindings.test_bindings[i - 1][1];
+
+            unsubscribe(qpgs[n], rabbitmq_bindings.test_bindings[i - 1][0], v, iferr(next, () => {
+                assigned[i - 1] = null;
+                subs[n][v] = null;
+                next();
+            }));
+        }, cb);
+    });
+
+    rabbitmq_tests(prefix + 'after remove_all', QCons, queues, rounds, msglen, retry_prob, rabbitmq_bindings.expected_results_after_remove_all, (qpgs, subs, assigned, unsubscribe, cb) => {
+        eachLimit(rabbitmq_bindings.bindings_to_remove, qpgs.length * 5, (i, next) => {
+            const topic = rabbitmq_bindings.test_bindings[i - 1][0];
+
+            eachLimit(assigned[topic], qpgs.length * 5, (nv, next2) => {
+                unsubscribe(qpgs[nv.n], topic, nv.v, iferr(next, () => {
+                    subs[nv.n][nv.v] = null;
+                    next2();
+                }));
+            }, iferr(next, () => {
+                assigned[i - 1] = null;
+                assigned[topic] = [];
+                next();
+            }));
+        }, cb);
+    });
+
+    rabbitmq_tests(prefix + 'after clear', QCons, queues, rounds, msglen, retry_prob, rabbitmq_bindings.expected_results_after_clear, (qpgs, subs, assigned, unsubscribe, cb) => {
+        each(qpgs, (qpg, next) => {
+            unsubscribe(qpg, undefined, undefined, next);
+        }, iferr(cb, () => {
+            subs.length = 0;
+            cb();
+        }));
+    });
 }
 
 function rabbitmq2(prefix, QCons, queues, rounds, msglen) {
