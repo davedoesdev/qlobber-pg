@@ -1,7 +1,12 @@
+const { EventEmitter } = require('events');
 const { randomBytes } = require('crypto');
+const { fork } = require('child_process');
+const path = require('path');
+const { cpus } = require('os');
 const { times, each, eachLimit, queue, parallel } = require('async');
 const { QlobberPG } = require('..');
 const { expect } = require('chai');
+const { argv } = require('yargs');
 const config = require('config');
 const iferr = require('iferr');
 const rabbitmq_bindings = require('./rabbitmq_bindings');
@@ -135,14 +140,14 @@ function rabbitmq_tests(name, QCons, num_queues, rounds, msglen, retry_prob, exp
                 name: `test${n}`
             }, config), num_queues, n);
 
-            qpg.on('start', () => {
-                if (n === 0) {
+            qpg.on('start', iferr(cb, () => {
+                if ((n === 0) && (QCons === QlobberPG)) {
                     return qpg._queue.push(cb => {
                         qpg._client.query('DELETE FROM messages', cb);
                     }, err => cb(err, qpg));
                 }
                 cb(null, qpg);
-            });
+            }));
         }, iferr(done, qpgs => {
             function publish() {
                 const pq = queue((task, cb) => {
@@ -279,9 +284,170 @@ function rabbitmq4(prefix, QCons, queues) {
     rabbitmq3(prefix, QCons, queues, 50);
 }
 
+class MPQPGBase extends EventEmitter {
+    constructor(child, options) {
+        super();
+
+        this._handlers = {};
+        this._handler_count = 0;
+        this._pub_cbs = {};
+        this._pub_cb_count = 0;
+        this._sub_cbs = {};
+        this._sub_cb_count = 0;
+        this._unsub_cbs = {};
+        this._unsub_cb_count = 0;
+        this._topics = {};
+        this._send_queue = queue((msg, cb) => child.send(msg, cb));
+
+        child.on('error', err => this.emit('error', err));
+        child.on('exit', (code, signal) => this.emit('stop'));
+
+        child.on('message', msg => {
+            //console.log("RECEIVED MESSAGE FROM CHILD", options.index, msg);
+            if (msg.type === 'start') {
+                this.emit('start', msg.err);
+            } else if (msg.type === 'stop') {
+                this._send_queue.push({ type: 'exit' });
+            } else if (msg.type === 'received') {
+                this._handlers[msg.handler](msg.sum, msg.info, err => {
+                    this._send_queue.push({
+                        type: 'recv_callback',
+                        cb: msg.cb,
+                        err
+                    });
+                });
+            } else if (msg.type === 'sub_callback') {
+                const cb = this._sub_cbs[msg.cb];
+                delete this._sub_cbs[msg.cb];
+                cb();
+            } else if (msg.type === 'unsub_callback') {
+                const cb = this._unsub_cbs[msg.cb];
+                delete this._unsub_cbs[msg.cb];
+                cb();
+            } else if (msg.type === 'pub_callback') {
+                const cb = this._pub_cbs[msg.cb];
+                delete this._pub_cbs[msg.cb];
+                cb(msg.err);
+            }
+        });
+    }
+
+    subscribe(topic, handler, cb) {
+        this._handlers[this._handler_count] = handler;
+        handler.__count == this._handler_count;
+
+        this._sub_cbs[this._sub_cb_count] = cb;
+
+        this._topics[topic] = this._topics[topic] || {};
+        this._topics[topic][this._handler_count] = true;
+
+        this._send_queue.push({
+            type: 'subscribe',
+            topic,
+            handler: this._handler_count,
+            cb: this._sub_cb_count
+        });
+
+        ++this._handler_count;
+        ++this._sub_cb_count;
+    }
+
+    unsubscribe(topic, handler, cb) {
+        if (topic === undefined) {
+            this._unsub_cbs[this._unsub_cb_count] = () => {
+                this._handlers = {};
+                this._topics = {};
+                cb();
+            };
+
+            this._send_queue.push({
+                type: 'unsubscribe',
+                cb: this._unsub_cb_count
+            });
+
+            ++this._unsub_cb_count;
+        } else if (handler === undefined) {
+            const n = this._topics[topic].length;
+
+            for (let h of this._topics[topic]) {
+                this._unsub_cbs[this._unsub_cb_count] = () => {
+                    delete this._handlers[h];
+                    if (--n === 0) {
+                        delete this._topics[topic];
+                        cb();
+                    }
+                };
+
+                this._send_queue.push({
+                    type: 'unsubscribe',
+                    topic,
+                    handler: h,
+                    cb: this._unsub_cb_count
+                });
+
+                ++this._unsub_cb_count;
+            }
+        } else {
+            this._unsub_cbs[this._unsub_cb_count] = () => {
+                delete this._handlers[handler.__count];
+                cb();
+            };
+
+            this._send_queue.push({
+                type: 'unsubscribe',
+                topic,
+                handler: handler.__count,
+                cb: this._unsub_cb_count
+            });
+
+            ++this._unsub_cb_count;
+        }
+    }
+
+    publish(topic, payload, options, cb) {
+        this._pub_cbs[this._pub_cb_count] = cb;
+
+        this._send_queue.push({
+            type: 'publish',
+            topic,
+            payload: payload.toString('base64'),
+            options,
+            cb: this._pub_cb_count
+        });
+
+        ++this._pub_cb_count;
+    }
+
+    stop(cb) {
+        this._send_queue.push({
+            type: 'stop'
+        });
+
+        if (cb) {
+            this.once('stop', cb);
+        }
+    }
+}
+
+class MPQPG extends MPQPGBase {
+    constructor(options, total, index) {
+        options = Object.assign({
+            total,
+            index
+        }, options);
+        super(fork(path.join(__dirname, 'mpqpg.js'),
+                   [Buffer.from(JSON.stringify(options)).toString('hex')]),
+              options);
+    }
+}
+
 describe('rabbit', function ()
 {
-    rabbitmq4('single-process', QlobberPG, 1);
-    rabbitmq4('single-process', QlobberPG, 2);
-    rabbitmq4('single-process', QlobberPG, 5);
+    if (argv.multi) {
+        rabbitmq4('multi-process', MPQPG, argv.queues || cpus().length);
+    } else {
+        rabbitmq4('single-process', QlobberPG, 1);
+        rabbitmq4('single-process', QlobberPG, 2);
+        rabbitmq4('single-process', QlobberPG, 5);
+    }
 });
