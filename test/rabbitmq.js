@@ -68,6 +68,9 @@ function rabbitmq_tests(name, QCons, num_queues, rounds, msglen, retry_prob, exp
                 ++count;
             }
 
+            //console.log(result);
+            //console.log(count, total, count_single, expected.length * rounds);
+
             if ((count === total) &&
                 (count_single === expected.length * rounds)) {
                 // wait a bit to catch duplicates
@@ -118,10 +121,10 @@ function rabbitmq_tests(name, QCons, num_queues, rounds, msglen, retry_prob, exp
 
         function unsubscribe(qpg, topic, value, cb) {
             if (value) {
-                return qpg.unsubscribe(topic, qpg.__submap[value], () => {
+                return qpg.unsubscribe(topic, qpg.__submap[value], iferr(cb, () => {
                     delete qpg.__submap[value];
                     cb();
-                });
+                }));
             }
 
             qpg.unsubscribe(topic, value, cb);
@@ -131,7 +134,7 @@ function rabbitmq_tests(name, QCons, num_queues, rounds, msglen, retry_prob, exp
             const qpg = new QCons(Object.assign({
                 name: `test${n}`
             }, config), num_queues, n);
-            
+
             qpg.on('start', () => {
                 if (n === 0) {
                     return qpg._queue.push(cb => {
@@ -180,10 +183,7 @@ function rabbitmq_tests(name, QCons, num_queues, rounds, msglen, retry_prob, exp
                         setTimeout(() => {
                             expect(count).to.equal(0);
                             expect(count_single).to.equal(0);
-
-                            each(qpgs, (qpg, next) => {
-                                qpg.stop(next);
-                            }, done);
+                            each(qpgs, (qpg, next) => qpg.stop(next), done);
                         }, 10 * 1000);
                     };
                 }
@@ -233,16 +233,17 @@ function rabbitmq2(prefix, QCons, queues, rounds, msglen) {
 
 function rabbitmq3(prefix, QCons, queues, rounds) {
     rabbitmq2(prefix, QCons, queues, rounds, 1);
-    //rabbitmq2(prefix, QCons, queues, rounds, 25 * 1024);
+    rabbitmq2(prefix, QCons, queues, rounds, 25 * 1024);
 }
 
 function rabbitmq4(prefix, QCons, queues) {
     rabbitmq3(prefix, QCons, queues, 1);
-    //rabbitmq3(prefix, QCons, queues, 50);
+    rabbitmq3(prefix, QCons, queues, 50);
 }
 
 describe('rabbit', function ()
 {
     rabbitmq4('single-process', QlobberPG, 1);
-    //rabbitmq4('single-process', QlobberPG, 2);
+    rabbitmq4('single-process', QlobberPG, 2);
+    rabbitmq4('single-process', QlobberPG, 5);
 });

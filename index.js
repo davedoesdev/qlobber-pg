@@ -1,13 +1,18 @@
 const { Writable, PassThrough } = require('stream');
 const { EventEmitter } = require('events');
-const { Client } = require('pg');
+const { Client, types } = require('pg');
 const { queue, asyncify } = require('async');
 const iferr = require('iferr');
 const { Qlobber, QlobberDedup } = require('qlobber');
 const escape = require('pg-escape');
 
+const global_lock = -1;
+
+types.setTypeParser(20 /* int8, bigserial */, BigInt);
+
 // TODO:
 // Tests from qlobber-fsq
+// Remove _in_transaction?
 
 // Note: Publish topics should be restricted to A-Za-z0-9_
 //       (ltree will error otherwise)
@@ -113,20 +118,32 @@ class QlobberPG extends EventEmitter {
             this._client.connect(cb);
         }, emit_error);
 
-        this._queue.push(cb => {
+        this._queue.push(asyncify(async () => {
             if (this._chkstop()) {
                 return;
             }
-            this._client.query(escape('DROP TRIGGER IF EXISTS %I ON messages', this._name), cb);
-        }, close_and_emit_error);
+            await this._client.query('SELECT pg_advisory_lock($1)', [
+                global_lock
+            ]);
+            try {
+                await this._client.query(escape('DROP TRIGGER IF EXISTS %I ON messages', this._name));
+            } finally {
+                await this._client.query('SELECT pg_advisory_unlock($1)', [
+                    global_lock
+                ]);
+            }
+        }), close_and_emit_error);
 
         this._queue.push(cb => {
             if (this._chkstop()) {
                 return;
             }
-            this._client.query('SELECT id FROM messages ORDER BY id DESC LIMIT 1', cb);
+            this._client.query('SELECT DISTINCT ON (publisher) publisher, id FROM messages ORDER BY publisher, id DESC', cb);
         }, iferr(close_and_emit_error, r => {
-            this._last_id = (r.rows.length > 0) ? r.rows[0].id : -1;
+            this._last_ids = new Map();
+            for (let row of r.rows) {
+                this._last_ids.set(row.publisher, row.id);
+            }
         }));
 
         this._queue.push(cb => {
@@ -216,6 +233,7 @@ class QlobberPG extends EventEmitter {
             if (!test) {
                 return cb(null, { rows: [] });
             }
+            //console.log("QUERYING", this._name, test);
             this._client.query(`SELECT * FROM messages AS NEW WHERE (${test}) ORDER BY ${this._order_by_expiry ? 'expires' : 'id'}`, cb);
         }, (err, r) => {
             if (this._chkstop()) {
@@ -238,14 +256,24 @@ class QlobberPG extends EventEmitter {
                         done();
                     }
                 };
-                let next_id = this._last_id;
+                //console.log("LAST_IDS BEFORE", this._name, this._last_ids);
+                let last_ids = new Map();
                 for (let msg of r.rows) {
-                    if (msg.id > next_id) {
-                        next_id = msg.id;
+                    //console.log("GOTMSG", this._name, msg);
+                    let last_id = this._last_ids.get(msg.publisher);
+                    if (last_id === undefined) {
+                        last_id = -1n;
+                    }
+                    if (msg.id > last_id) {
+                        last_ids.set(msg.publisher, msg.id);
                     }
                     this._message(msg, deferred, extra_matcher, check);
                 }
-                this._last_id = next_id;
+                //console.log("LAST_IDS UPDATE", this._name, last_ids);
+                for (let [publisher, id] of last_ids) {
+                    this._last_ids.set(publisher, id);
+                }
+                //console.log("LAST_IDS AFTER", this._name, this._last_ids);
             }
         });
     }
@@ -328,7 +356,7 @@ class QlobberPG extends EventEmitter {
                 data = Buffer.from(data, 'hex');
             }
 
-            info.expires = Date.parse(info.expires);
+            info.expires = info.expires.getTime();
             info.size = data.length;
 
             let stream;
@@ -562,7 +590,12 @@ class QlobberPG extends EventEmitter {
             return cb();
         }
 
-        if (payload.id <= this._last_id) {
+        let last_id = this._last_ids.get(payload.publisher);
+        if (last_id === undefined) {
+            last_id = -1n;
+        }
+
+        if (payload.id <= last_id) {
             payload.existing = true;
         }
 
@@ -665,8 +698,34 @@ class QlobberPG extends EventEmitter {
     }
 
     _ltreeify(topic) {
-        return topic.replace(/(?<=^|\.)(\*)(?=$|\.)/g, '$1{1}')
-                    .replace(/(?<=^|\.)#(?=$|\.)/g, '*');
+        const t = topic.split('.');
+        const r = [];
+        let asterisks = 0;
+        let hashes = 0;
+        for (let i = 0; i < t.length; ++i) {
+            const l = t[i];
+            switch (l) {
+            case '*':
+                ++asterisks;
+                if (t[i+1] !== '*') {
+                    r.push(`*{${asterisks}}`);
+                    asterisks = 0;
+                }
+                break;
+            case '#':
+                ++hashes;
+                if (t[i+1] !== '#') {
+                    r.push('*');
+                    hashes = 0;
+                }
+                break;
+
+            default:
+                r.push(l);
+                break;
+            }
+        }
+        return r.join('.');
     }
 
     _or_topics(topics) {
@@ -695,7 +754,10 @@ class QlobberPG extends EventEmitter {
         if (topics.size > 0) {
             r = this._or_topics(topics);
             if (check) {
-                r = `((${r}) AND ((NEW.id > ${this._last_id}) OR NEW.single))`;
+                const last_ids = Array.from(this._last_ids);
+                if (last_ids.length > 0) {
+                    r = `(${r} AND (${last_ids.map(([publisher, id]) => escape('((NEW.publisher = %L) AND (NEW.id > %s))', publisher, id)).join(' OR ')} OR (${last_ids.map(([publisher]) => escape('(NEW.publisher != %L)', publisher)).join(' AND ')}) OR NEW.single))`;
+                }
             }
         }
         if (check && (this._deferred.size > 0)) {
@@ -713,10 +775,19 @@ class QlobberPG extends EventEmitter {
                 if (this._chkstop()) {
                     throw new Error('stopped');
                 }
-                await this._client.query(escape('DROP TRIGGER IF EXISTS %I ON messages', this._name));
-                const test = this._topics_test(false);
-                if (test) {
-                    await this._client.query(escape(`CREATE TRIGGER %I AFTER INSERT ON messages FOR EACH ROW WHEN ${test} EXECUTE PROCEDURE new_message(%I)`, this._name, this._name));
+                await this._client.query('SELECT pg_advisory_lock($1)', [
+                    global_lock
+                ]);
+                try {
+                    await this._client.query(escape('DROP TRIGGER IF EXISTS %I ON messages', this._name));
+                    const test = this._topics_test(false);
+                    if (test) {
+                        await this._client.query(escape(`CREATE TRIGGER %I AFTER INSERT ON messages FOR EACH ROW WHEN ${test} EXECUTE PROCEDURE new_message(%I)`, this._name, this._name));
+                    }
+                } finally {
+                    await this._client.query('SELECT pg_advisory_unlock($1)', [
+                        global_lock
+                    ]);
                 }
             }), cb);
         }, cb);
@@ -764,6 +835,8 @@ class QlobberPG extends EventEmitter {
             cb = options;
             options = undefined;
         }
+
+        //console.log("SUBSCRIBE", this._name, topic);
 
         options = options || {};
         const cb2 = (err, ...args) => {
@@ -857,18 +930,23 @@ class QlobberPG extends EventEmitter {
             if (this._chkstop()) {
                 return cb2(new Error('stopped'));
             }
+            //console.log("PUBLISHING", this._name, topic, single);
             // Note: ltree will validate topic (maxlen 255) to A-Za-z0-9_
-            this._queue.push(cb => this._client.query("INSERT INTO messages(topic, expires, single, data) VALUES($1, $2, $3, decode($4::text, 'hex'))", [
+            this._queue.push(cb => this._client.query("INSERT INTO messages(topic, expires, single, data, publisher) VALUES($1, $2, $3, decode($4::text, 'hex'), $5)", [
                 topic,
                 new Date(expires),
                 single,
-                data.toString('hex')
-            ], cb), iferr(cb2, () => cb2(null, {
-                topic,
-                expires,
-                single,
-                size: data.length
-            })));
+                data.toString('hex'),
+                this._name
+            ], cb), iferr(cb2, () => { 
+                //console.log("PUBLISHED", this._name, topic, single);
+                cb2(null, {
+                    topic,
+                    expires,
+                    single,
+                    size: data.length
+                })
+            }));
         };
 
         if (Buffer.isBuffer(payload)) {

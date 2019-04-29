@@ -1,7 +1,7 @@
 exports.up = pgm => {
     pgm.createTable('messages', {
         id: {
-            type: 'serial',
+            type: 'bigserial',
             primaryKey: true
         },
         topic: {
@@ -9,7 +9,7 @@ exports.up = pgm => {
             notNull: true
         },
         expires: {
-            type: 'timestamp',
+            type: 'timestamptz',
             notNull: true
         },
         single: {
@@ -19,6 +19,10 @@ exports.up = pgm => {
         data: {
             type: 'bytea',
             notNull: true
+        },
+        publisher: {
+            type: 'text',
+            notNull: true
         }
     });
 
@@ -26,4 +30,12 @@ exports.up = pgm => {
         returns: 'trigger',
         language: 'plpgsql'
     }, "BEGIN PERFORM pg_notify('new_message_' || TG_ARGV[0], ''); RETURN NULL; END;");
+};
+
+exports.down = pgm => {
+    pgm.dropFunction('new_message', [], {
+        cascade: true
+    });
+
+    pgm.dropTable('messages');
 };
