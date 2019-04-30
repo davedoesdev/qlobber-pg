@@ -860,6 +860,8 @@ class QlobberPG extends EventEmitter {
     }
 
     unsubscribe(topic, handler, cb) {
+        //console.log("UNSUB", topic, handler, cb);
+
         if (typeof topic === 'function') {
             cb = topic;
             topic = undefined;

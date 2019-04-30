@@ -125,7 +125,9 @@ function rabbitmq_tests(name, QCons, num_queues, rounds, msglen, retry_prob, exp
         }
 
         function unsubscribe(qpg, topic, value, cb) {
+            //console.log("UNSUBSCRIBE", qpg._name, topic, value);
             if (value) {
+                //console.log("UNSUBSCRIBE2", qpg._name, topic, value, qpg.__submap[value]);
                 return qpg.unsubscribe(topic, qpg.__submap[value], iferr(cb, () => {
                     delete qpg.__submap[value];
                     cb();
@@ -288,6 +290,8 @@ class MPQPGBase extends EventEmitter {
     constructor(child, options) {
         super();
 
+        this._name = options.name;
+
         this._handlers = {};
         this._handler_count = 0;
         this._pub_cbs = {};
@@ -334,7 +338,7 @@ class MPQPGBase extends EventEmitter {
 
     subscribe(topic, handler, cb) {
         this._handlers[this._handler_count] = handler;
-        handler.__count == this._handler_count;
+        handler.__count = this._handler_count;
 
         this._sub_cbs[this._sub_cb_count] = cb;
 
