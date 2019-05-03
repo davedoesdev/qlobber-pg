@@ -1,6 +1,7 @@
-const { Writable, PassThrough } = require('stream');
+const { Writable, PassThrough, pipeline } = require('stream');
 const { EventEmitter } = require('events');
 const { Client, types } = require('pg');
+const QueryStream = require('pg-query-stream');
 const { queue, asyncify } = require('async');
 const iferr = require('iferr');
 const { Qlobber, QlobberDedup } = require('qlobber');
@@ -12,7 +13,6 @@ types.setTypeParser(20 /* int8, bigserial */, BigInt);
 
 // TODO:
 // Tests from qlobber-fsq
-// Remove _in_transaction?
 
 // Note: Publish topics should be restricted to A-Za-z0-9_
 //       (ltree will error otherwise)
@@ -49,6 +49,7 @@ class QlobberPG extends EventEmitter {
         this._do_dedup = options.dedup === undefined ? true : options.dedup;
         this._do_single = options.single === undefined ? true : options.single;
         this._order_by_expiry = options.order_by_expiry;
+        this._batch_size = options.batch_size;
 
         this._topics = new Map();
         this._deferred = new Set();
@@ -72,9 +73,11 @@ class QlobberPG extends EventEmitter {
 
         this._queue = queue((task, cb) => task(cb));
 
-        this._message_queue = queue(this._handle_message.bind(this),
-                                    options.message_concurrency || 1);
-
+        this._message_queue = queue((task, cb) => {
+            setImmediate(task.cb);
+            this._handle_message(task.payload, cb);
+        }, options.message_concurrency || 1);
+        
         if (options.handler_concurrency) {
             this._handler_queue = queue((task, cb) => {
                 setImmediate(task.cb);
@@ -231,34 +234,30 @@ class QlobberPG extends EventEmitter {
             }
             const test = this._topics_test(true);
             if (!test) {
-                return cb(null, { rows: [] });
+                const passthru = new PassThrough();
+                passthru.end();
+                return cb(null, passthru);
             }
             //console.log("QUERYING", this._name, test);
-            this._client.query(`SELECT * FROM messages AS NEW WHERE (${test}) ORDER BY ${this._order_by_expiry ? 'expires' : 'id'}`, cb);
-        }, (err, r) => {
+            cb(null, this._client.query(new QueryStream(`SELECT * FROM messages AS NEW WHERE (${test}) ORDER BY ${this._order_by_expiry ? 'expires' : 'id'}`, [], {
+                batchSize: this._batch_size
+            })));
+        }, (err, stream) => {
             if (this._chkstop()) {
                 return;
             }
-            if (!this._warning(err)) {
-                const deferred = this._deferred;
-                this._deferred = new Set();
-                const extra_matcher = this._extra_matcher;
-                delete this._extra_matcher;
-                const done = () => {
-                    this._check_timeout = setTimeout(this._check.bind(this), this._check_delay);
-                };
-                if (r.rows.length === 0) {
-                    return done();
-                }
-                let count = 0;
-                const check = () => {
-                    if (++count === r.rows.length) {
-                        done();
-                    }
-                };
-                //console.log("LAST_IDS BEFORE", this._name, this._last_ids);
-                let last_ids = new Map();
-                for (let msg of r.rows) {
+            if (err) {
+                return this.emit('error', err);
+            }
+            const deferred = this._deferred;
+            this._deferred = new Set();
+            const extra_matcher = this._extra_matcher;
+            delete this._extra_matcher;
+            //console.log("LAST_IDS BEFORE", this._name, this._last_ids);
+            let last_ids = new Map();
+            pipeline(stream, new Writable({
+                objectMode: true,
+                write: (msg, encoding, cb) => {
                     //console.log("GOTMSG", this._name, msg);
                     let last_id = this._last_ids.get(msg.publisher);
                     if (last_id === undefined) {
@@ -267,14 +266,22 @@ class QlobberPG extends EventEmitter {
                     if (msg.id > last_id) {
                         last_ids.set(msg.publisher, msg.id);
                     }
-                    this._message(msg, deferred, extra_matcher, check);
+                    this._message(msg, deferred, extra_matcher, cb);
+                }
+            }), err => {
+                if (this._chkstop()) {
+                    return;
+                }
+                if (err) {
+                    return this.emit('error', err);;
                 }
                 //console.log("LAST_IDS UPDATE", this._name, last_ids);
                 for (let [publisher, id] of last_ids) {
                     this._last_ids.set(publisher, id);
                 }
                 //console.log("LAST_IDS AFTER", this._name, this._last_ids);
-            }
+                this._check_timeout = setTimeout(this._check.bind(this), this._check_delay);
+            });
         });
     }
 
@@ -348,16 +355,8 @@ class QlobberPG extends EventEmitter {
         wait_for_done.num_handlers = len;
 
         const deliver_message = lock_client => {
-            let data = info.data;
-            if (!Buffer.isBuffer(data)) {
-                if (data.startsWith('\\x')) {
-                    data = data.substr(2);
-                }
-                data = Buffer.from(data, 'hex');
-            }
-
             info.expires = info.expires.getTime();
-            info.size = data.length;
+            info.size = info.data.length;
 
             let stream;
             let destroyed = false;
@@ -419,7 +418,7 @@ class QlobberPG extends EventEmitter {
                 }
 
                 stream = new PassThrough();
-                stream.end(data);
+                stream.end(info.data);
                 stream.setMaxListeners(0);
 
                 const sdone = () => {
@@ -446,7 +445,7 @@ class QlobberPG extends EventEmitter {
                     handler.call(this, ensure_stream(), info, hcb);
                     delivered_stream = true;
                 } else {
-                    handler.call(this, data, info, hcb);
+                    handler.call(this, info.data, info, hcb);
                 }
             }
 
@@ -508,11 +507,7 @@ class QlobberPG extends EventEmitter {
 
     _call_handlers(handlers, info, cb) {
         if (this._handler_queue) {
-            return this._handler_queue.push({
-                handlers,
-                info,
-                cb
-            });
+            return this._handler_queue.push({ handlers, info, cb });
         }
         this._call_handlers2(handlers, info, cb);
     }
@@ -622,7 +617,7 @@ class QlobberPG extends EventEmitter {
             }
         }
 
-        return this._message_queue.push(payload, cb);
+        return this._message_queue.push({ payload, cb });
     }
 
     stop(cb) {
@@ -664,37 +659,6 @@ class QlobberPG extends EventEmitter {
 
     stop_watching(cb) { // qlobber-fsq compatibility
         stop(cb);
-    }
-
-    _end_transaction(cb) {
-        return (err, ...args) => {
-            if (err) {
-                return this._queue.unshift(cb => {
-                    if (this._chkstop()) {
-                        return cb(new Error('stopped'));
-                    }
-                    this._client.query('ROLLBACK', cb);
-                }, err2 => cb(err2 || err, ...args));
-            }
-
-            this._queue.unshift(cb => {
-                if (this._chkstop()) {
-                    return cb(new Error('stopped'));
-                }
-                this._client.query('COMMIT', cb);
-            }, err => cb(err, ...args));
-        };
-    }
-
-    _in_transaction(f, cb) {
-        this._queue.push(
-            cb => {
-                if (this._chkstop()) {
-                    return cb(new Error('stopped'));
-                }
-                this._client.query('BEGIN', cb);
-            },
-            iferr(cb, () => f(this._end_transaction(cb))));
     }
 
     _ltreeify(topic) {
@@ -770,27 +734,25 @@ class QlobberPG extends EventEmitter {
     }
         
     _update_trigger(cb) {
-        this._in_transaction(cb => {
-            this._queue.unshift(asyncify(async () => {
-                if (this._chkstop()) {
-                    throw new Error('stopped');
+        this._queue.push(asyncify(async () => {
+            if (this._chkstop()) {
+                throw new Error('stopped');
+            }
+            await this._client.query('SELECT pg_advisory_lock($1)', [
+                global_lock
+            ]);
+            try {
+                await this._client.query(escape('DROP TRIGGER IF EXISTS %I ON messages', this._name));
+                const test = this._topics_test(false);
+                if (test) {
+                    await this._client.query(escape(`CREATE TRIGGER %I AFTER INSERT ON messages FOR EACH ROW WHEN ${test} EXECUTE PROCEDURE new_message(%I)`, this._name, this._name));
                 }
-                await this._client.query('SELECT pg_advisory_lock($1)', [
+            } finally {
+                await this._client.query('SELECT pg_advisory_unlock($1)', [
                     global_lock
                 ]);
-                try {
-                    await this._client.query(escape('DROP TRIGGER IF EXISTS %I ON messages', this._name));
-                    const test = this._topics_test(false);
-                    if (test) {
-                        await this._client.query(escape(`CREATE TRIGGER %I AFTER INSERT ON messages FOR EACH ROW WHEN ${test} EXECUTE PROCEDURE new_message(%I)`, this._name, this._name));
-                    }
-                } finally {
-                    await this._client.query('SELECT pg_advisory_unlock($1)', [
-                        global_lock
-                    ]);
-                }
-            }), cb);
-        }, cb);
+            }
+        }), cb);
     }
 
     _valid_stopic(topic, cb) {
@@ -946,7 +908,8 @@ class QlobberPG extends EventEmitter {
                     topic,
                     expires,
                     single,
-                    size: data.length
+                    size: data.length,
+                    publisher: this._name
                 })
             }));
         };

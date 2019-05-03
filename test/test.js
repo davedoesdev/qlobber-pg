@@ -91,7 +91,6 @@ describe('qlobber-pq', function () {
             if (pub_info && sub_info) {
                 pub_info.id = sub_info.id;
                 pub_info.data = sub_info.data;
-                pub_info.expires = Math.floor(pub_info.expires / 1000) * 1000;
                 expect(pub_info).to.eql(sub_info);
                 done();
             }
@@ -1236,7 +1235,7 @@ describe('qlobber-pq', function () {
     });
 
     it('should by able to read more than one message at a time', function (done) {
-        this.timeout(120000);
+        this.timeout(2 * 60 * 1000);
 
         after_each(iferr(done, () => {
             before_each(iferr(done, () => {
@@ -1244,7 +1243,7 @@ describe('qlobber-pq', function () {
                 let count = 0;
 
                 function handler(stream, info, cb) {
-                    expect(in_call).to.be.at.most(1);
+                    expect(in_call).to.equal(count % 2);
                     ++in_call;
                     ++count;
                     console.log(count);
@@ -1340,9 +1339,8 @@ describe('qlobber-pq', function () {
         after_each(iferr(done, () => {
             const qpg = make_qpg(null, { name: 'test2' });
             const orig_query = qpg._client.query;
-            qpg._client.query = function (...args) {
-                const cb = args[args.length - 1];
-                cb(new Error('dummy error'));
+            qpg._client.query = async function () {
+                throw new Error('dummy error');
             };
             qpg.on('error', function (err) {
                 expect(err.message).to.equal('dummy error');
@@ -1437,11 +1435,7 @@ describe('qlobber-pq', function () {
                 qpg.subscribe('a..b', () => {}, err => {
                     // ltree doesn't allow it either
                     expect(err.message).to.equal('invalid subscription topic: a..b');
-                    qpg.subscribe('', () => {}, err => {
-                        // ltree doesn't allow it either
-                        expect(err.message).to.equal('invalid subscription topic: ');
-                        done();
-                    });
+                    done();
                 });
             });
         });
@@ -1455,11 +1449,7 @@ describe('qlobber-pq', function () {
                 qpg.unsubscribe('a..b', () => {}, err => {
                     // ltree doesn't allow it either
                     expect(err.message).to.equal('invalid subscription topic: a..b');
-                    qpg.unsubscribe('', undefined, err => {
-                        // ltree doesn't allow it either
-                        expect(err.message).to.equal('invalid subscription topic: ');
-                        done();
-                    });
+                    done();
                 });
             });
         });
@@ -1961,19 +1951,20 @@ describe('qlobber-pq', function () {
     });
 
     it('should be able to unsubscribe while message being processed', function (done) {
-        const orig_parse = Date.parse;
+        const orig_num_handlers = qpg._num_handlers;
 
         function handler() {
             done(new Error('should not be called'));
         }
 
-        Date.parse = function (...args) {
-            Date.parse = orig_parse;
+        qpg._num_handlers = function (...args) {
+            qpg._num_handlers = orig_num_handlers;
             
             qpg.unsubscribe('foo', handler, iferr(done, () => {
                 setImmediate(done);
-                orig_parse.apply(this, args);
             }));
+
+            return orig_num_handlers.apply(this, args);
         };
 
         qpg.subscribe('foo', handler, iferr(done, () => {
