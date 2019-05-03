@@ -462,47 +462,42 @@ class QlobberPG extends EventEmitter {
             return deliver_message();
         }
 
-        this._queue.push(asyncify(async () => {
-            if (this._chkstop()) {
-                return null;
+        const lock = async lock_client => {
+            let r = await lock_client.query('SELECT pg_try_advisory_lock($1)', [
+                info.id
+            ]);
+            if (!r.rows[0].pg_try_advisory_lock || this._chkstop()) {
+                return false;
             }
+            r = await lock_client.query('SELECT EXISTS(SELECT 1 FROM messages WHERE (id = $1 AND (expires > NOW())))', [
+                info.id
+            ]);
+            if (!r.rows[0].exists || this._chkstop()) {
+                return false;
+            }
+            return true;
+        };
+
+        (async () => {
             const lock_client = new Client(this._db);
-            let r;
             try {
                 await lock_client.connect();
-                r = await lock_client.query('SELECT pg_try_advisory_lock($1)', [
-                    info.id
-                ]);
             } catch (ex) {
-                await lock_client.end();
-                throw ex;
+                return done(ex);
             }
-            if (!r.rows[0].pg_try_advisory_lock || this._chkstop()) {
-                await lock_client.end();
-                return null;
-            }
+            let deliver;
             try {
-                r = await this._client.query('SELECT EXISTS(SELECT 1 FROM messages WHERE (id = $1 AND (expires > NOW())))', [
-                    info.id
-                ]);
+                deliver = await lock(lock_client);
             } catch (ex) {
                 await lock_client.end();
-                throw ex;
+                return done(ex);
             }
-            if (r.rows[0].exists) {
-                return lock_client;
-            }
-            await lock_client.end();
-            return null;
-        }), iferr(done, lock_client => {
-            if (!lock_client) {
+            if (!deliver) {
+                await lock_client.end();
                 return done();
             }
-            if (this._chkstop()) {
-                return lock_client.end(done);
-            }
             deliver_message(lock_client);
-        }));
+        })();
     }
 
     _call_handlers(handlers, info, cb) {
@@ -537,7 +532,7 @@ class QlobberPG extends EventEmitter {
                     handlers = [handlers[0]];
                 }
             }
-            if (handlers.length === 0) {
+            if (this._num_handlers(handlers) === 0) {
                 return cb();
             }
             this._call_handlers(handlers, payload, cb);
@@ -617,7 +612,7 @@ class QlobberPG extends EventEmitter {
             }
         }
 
-        return this._message_queue.push({ payload, cb });
+        this._message_queue.push({ payload, cb });
     }
 
     stop(cb) {
