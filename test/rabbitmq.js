@@ -7,6 +7,7 @@ const { times, each, eachLimit, queue, parallel } = require('async');
 const { QlobberPG } = require('..');
 const { expect } = require('chai');
 const { argv } = require('yargs');
+const cp_remote = require('cp-remote');
 const config = require('config');
 const iferr = require('iferr');
 const rabbitmq_bindings = require('./rabbitmq_bindings');
@@ -435,19 +436,33 @@ class MPQPGBase extends EventEmitter {
 
 class MPQPG extends MPQPGBase {
     constructor(options, total, index) {
-        options = Object.assign({
-            total,
-            index
-        }, options);
+        options = Object.assign({ total, index }, options);
         super(fork(path.join(__dirname, 'mpqpg.js'),
                    [Buffer.from(JSON.stringify(options)).toString('hex')]),
               options);
     }
 }
 
+function make_RemoteMPQPG(hosts) {
+    return class extends MPQPGBase {
+        constructor(options, total, index) {
+            options = Object.assign({ total, index }, options);
+            super(cp_remote.run(hosts[index],
+                                path.join(__dirname, 'mpqpg.js'),
+                                Buffer.from(JSON.stringify(options)).toString('hex')),
+            
+                  options);
+            this._host = hosts[index];
+        }
+    };
+}
+
 describe('rabbit', function ()
 {
-    if (argv.multi) {
+    if (argv.remote) {
+        const hosts = typeof argv.remote === 'string' ? [argv.remote] : argv.remote;
+        rabbitmq4('distributed', make_RemoteMPQPG(hosts), hosts.length);
+    } else if (argv.multi) {
         rabbitmq4('multi-process', MPQPG, argv.queues || cpus().length);
     } else {
         rabbitmq4('single-process', QlobberPG, 1);
