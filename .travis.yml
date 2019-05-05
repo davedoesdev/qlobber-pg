@@ -26,8 +26,9 @@ before_install:
   - cat ~/.bashrc
   - nvm alias default "$(nvm current)"
   - ssh localhost node --version
+  - whoami
 before_script:
-  - psql -c 'create database "qlobber-pg";' -U postgres
+  - psql -c 'create database "qlobber-pg";'
   - npm run migrate up
 script:
   - npm run $TARGET
