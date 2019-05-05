@@ -18,117 +18,118 @@ describe('multiple queues', function () {
     this.timeout(timeout);
 
     function publish_to_queues(name, num_queues, num_messages, max_message_size, get_single) {
-    it(`should publish to multiple queues (${name}, num_queues=${num_queues}, num_messages=${num_messages}, max_message_size=${max_message_size})`, function (done) {
-        let num_single = 0;
-        let num_multi = 0;
-        let count_single = 0;
-        let count_multi = 0;
-        let the_qpgs;
-        let checksum = 0;
-        let expected_checksum = 0;
+        it(`should publish to multiple queues (${name}, num_queues=${num_queues}, num_messages=${num_messages}, max_message_size=${max_message_size})`, function (done) {
+            let num_single = 0;
+            let num_multi = 0;
+            let count_single = 0;
+            let count_multi = 0;
+            let the_qpgs;
+            let checksum = 0;
+            let expected_checksum = 0;
 
-        timesSeries(num_queues, (n, cb) => {
-            const qpg = new QlobberPG(Object.assign({
-                name: `test${n}`
-            }, config));
+            timesSeries(num_queues, (n, cb) => {
+                const qpg = new QlobberPG(Object.assign({
+                    name: `test${n}`
+                }, config));
 
-            let qcount = 0;
+                let qcount = 0;
 
-            function subscribe() {
-                qpg.subscribe('foo', function (data, info, cb) {
-                    expect(info.topic).to.equal('foo');
+                function subscribe() {
+                    qpg.subscribe('foo', function (data, info, cb) {
+                        expect(info.topic).to.equal('foo');
 
-                    if (typeof get_single === 'boolean') {
-                        expect(info.single).to.equal(get_single);
+                        if (typeof get_single === 'boolean') {
+                            expect(info.single).to.equal(get_single);
+                        }
+                        
+                        checksum += sum(data);
+
+                        ++qcount;
+
+                        if (get_single === false) {
+                            expect(qcount).to.be.at.most(num_multi);
+                        }
+
+                        if (info.single) {
+                            ++count_single;
+                        } else {
+                            ++count_multi;
+                        }
+
+                        //console.log('MSG', count_single, num_single, count_multi, num_multi * num_queues);
+
+                        if (the_qpgs &&
+                            (count_single === num_single) &&
+                            (count_multi === num_multi * num_queues)) {
+                            process.nextTick(() => {
+                                each(the_qpgs, (qpg, cb) => qpg.stop(cb), iferr(done, () => {
+                                    expect(checksum).to.be.above(0);
+                                    expect(checksum).to.equal(expected_checksum);
+                                    done();
+                                }));
+                            });
+                            cb();
+                        } else if (count_single > num_single) {
+                            done(new Error('single called too many times'));
+                        } else if (count_multi > num_multi * num_queues) {
+                            done(new Error('multi called too many times'));
+                        } else {
+                            cb();
+                        }
+                    });
+
+                    cb(null, qpg);
+                }
+
+                qpg.on('start', () => {
+                    if (n === 0) {
+                        return qpg._queue.push(cb => {
+                            qpg._client.query('DELETE FROM messages', cb);
+                        }, iferr(cb, subscribe));
                     }
-                    
-                    checksum += sum(data);
-
-                    ++qcount;
-
-                    if (get_single === false) {
-                        expect(qcount).to.be.at.most(num_multi);
-                    }
-
-                    if (info.single) {
-                        ++count_single;
-                    } else {
-                        ++count_multi;
-                    }
-
-                    //console.log('MSG', count_single, num_single, count_multi, num_multi * num_queues);
-
-                    if (the_qpgs &&
-                        (count_single === num_single) &&
-                        (count_multi === num_multi * num_queues)) {
-                        process.nextTick(() => {
-                            each(the_qpgs, (qpg, cb) => qpg.stop(cb), iferr(done, () => {
-                                expect(checksum).to.be.above(0);
-                                expect(checksum).to.equal(expected_checksum);
-                                done();
-                            }));
-                        });
-                        cb();
-                    } else if (count_single > num_single) {
-                        done(new Error('single called too many times'));
-                    } else if (count_multi > num_multi * num_queues) {
-                        done(new Error('multi called too many times'));
-                    } else {
-                        cb();
-                    }
+                    subscribe();
                 });
+            }, iferr(done, qpgs => {
+                expect(qpgs.length).to.equal(num_queues);
 
-                cb(null, qpg);
-            }
+                timesLimit(num_messages, 50, (n, cb) => {
+                    const single = typeof get_single === 'boolean' ? get_single : get_single();
+                    const data = randomBytes(Math.round(Math.random() * max_message_size));
+                    const check = sum(data);
 
-            qpg.on('start', () => {
-                if (n === 0) {
-                    return qpg._queue.push(cb => {
-                        qpg._client.query('DELETE FROM messages', cb);
-                    }, iferr(cb, subscribe));
-                }
-                subscribe();
-            });
-        }, iferr(done, qpgs => {
-            expect(qpgs.length).to.equal(num_queues);
+                    if (single) {
+                        ++num_single;
+                        expected_checksum += check;
+                    } else {
+                        ++num_multi;
+                        expected_checksum += check * num_queues;
+                    }
 
-            timesLimit(num_messages, 50, (n, cb) => {
-                const single = typeof get_single === 'boolean' ? get_single : get_single();
-                const data = randomBytes(Math.round(Math.random() * max_message_size));
-                const check = sum(data);
+                    const q = Math.floor(Math.random() * num_queues);
 
-                if (single) {
-                    ++num_single;
-                    expected_checksum += check;
-                } else {
-                    ++num_multi;
-                    expected_checksum += check * num_queues;
-                }
+                    qpgs[q].publish('foo', data, {
+                        ttl: timeout,
+                        single
+                    }, cb);
+                }, iferr(done, () => {
+                    expect(num_single + num_multi).to.equal(num_messages);
 
-                const q = Math.floor(Math.random() * num_queues);
+                    //console.log('PUBLISHED');
 
-                qpgs[q].publish('foo', data, {
-                    ttl: timeout,
-                    single
-                }, cb);
-            }, iferr(done, () => {
-                expect(num_single + num_multi).to.equal(num_messages);
+                    if ((count_single === num_single) &&
+                        (count_multi === num_multi * num_queues)) {
+                        each(qpgs, (qpg, cb) => qpg.stop(cb), iferr(done, () => {
+                            expect(checksum).to.be.above(0);
+                            expect(checksum).to.equal(expected_checksum);
+                            done();
+                        }));
+                    }
 
-                //console.log('PUBLISHED');
-
-                if ((count_single === num_single) &&
-                    (count_multi === num_multi * num_queues)) {
-                    each(qpgs, (qpg, cb) => qpg.stop(cb), iferr(done, () => {
-                        expect(checksum).to.be.above(0);
-                        expect(checksum).to.equal(expected_checksum);
-                        cb(null, done);
-                    }));
-                }
-
-                the_qpgs = qpgs;
+                    the_qpgs = qpgs;
+                }));
             }));
-        }));
-    })}
+        });
+    }
 
     function publish_to_queues2(num_queues, num_messages, max_message_size) {
         publish_to_queues('multi', num_queues, num_messages, max_message_size, false);
@@ -145,6 +146,11 @@ describe('multiple queues', function () {
     }
 
     publish_to_queues3(1, 200 * 1024);
-    publish_to_queues3(10, 100 * 1024);
-    publish_to_queues3(50, 20 * 1024);
+
+    if (process.env.NYC_CWD) {
+        publish_to_queues3(5, 100 * 1024);
+    } else {
+        publish_to_queues3(10, 100 * 1024);
+        publish_to_queues3(50, 20 * 1024);
+    }
 });

@@ -10,7 +10,7 @@ const { argv } = require('yargs');
 const cp_remote = require('cp-remote');
 const config = require('config');
 const iferr = require('iferr');
-const rabbitmq_bindings = require('./rabbitmq_bindings');
+const rabbitmq_bindings = require('./fixtures/rabbitmq_bindings.js');
 
 function topic_sort(a, b) {
     return parseInt(a.substr(1), 10) - parseInt(b.substr(1), 10);
@@ -43,7 +43,7 @@ function rabbitmq_tests(name, QCons, num_queues, rounds, msglen, retry_prob, exp
         let expected_result_single = [];
         for (let i = 0; i < rounds; ++i) {
             expected_result_single = expected_result_single.concat(
-                    Object.keys(expected2));
+                Object.keys(expected2));
         }
         expected_result_single.sort();
 
@@ -305,7 +305,7 @@ class MPQPGBase extends EventEmitter {
         this._send_queue = queue((msg, cb) => child.send(msg, cb));
 
         child.on('error', err => this.emit('error', err));
-        child.on('exit', (code, signal) => this.emit('stop'));
+        child.on('exit', () => this.emit('stop'));
 
         child.on('message', msg => {
             //console.log("RECEIVED MESSAGE FROM CHILD", options.index, msg);
@@ -372,7 +372,7 @@ class MPQPGBase extends EventEmitter {
 
             ++this._unsub_cb_count;
         } else if (handler === undefined) {
-            const n = this._topics[topic].length;
+            let n = this._topics[topic].length;
 
             for (let h of this._topics[topic]) {
                 this._unsub_cbs[this._unsub_cb_count] = () => {
@@ -437,9 +437,11 @@ class MPQPGBase extends EventEmitter {
 class MPQPG extends MPQPGBase {
     constructor(options, total, index) {
         options = Object.assign({ total, index }, options);
-        super(fork(path.join(__dirname, 'mpqpg.js'),
-                   [Buffer.from(JSON.stringify(options)).toString('hex')]),
-              options);
+        super(
+            fork(
+                path.join(__dirname, 'fixtures', 'mpqpg.js'),
+                [Buffer.from(JSON.stringify(options)).toString('hex')]),
+            options);
     }
 }
 
@@ -447,18 +449,18 @@ function make_RemoteMPQPG(hosts) {
     return class extends MPQPGBase {
         constructor(options, total, index) {
             options = Object.assign({ total, index }, options);
-            super(cp_remote.run(hosts[index],
-                                path.join(__dirname, 'mpqpg.js'),
-                                Buffer.from(JSON.stringify(options)).toString('hex')),
-            
-                  options);
+            super(
+                cp_remote.run(
+                    hosts[index],
+                    path.join(__dirname, 'fixtures', 'mpqpg.js'),
+                    Buffer.from(JSON.stringify(options)).toString('hex')),
+                options);
             this._host = hosts[index];
         }
     };
 }
 
-describe('rabbit', function ()
-{
+describe('rabbit', function () {
     if (argv.remote) {
         const hosts = typeof argv.remote === 'string' ? [argv.remote] : argv.remote;
         rabbitmq4('distributed', make_RemoteMPQPG(hosts), hosts.length);
@@ -467,6 +469,9 @@ describe('rabbit', function ()
     } else {
         rabbitmq4('single-process', QlobberPG, 1);
         rabbitmq4('single-process', QlobberPG, 2);
-        rabbitmq4('single-process', QlobberPG, 5);
+
+        if (!process.env.NYC_CWD) {
+            rabbitmq4('single-process', QlobberPG, 5);
+        }
     }
 });

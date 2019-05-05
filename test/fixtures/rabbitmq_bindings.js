@@ -1,3 +1,5 @@
+/* eslint-disable indent */
+
 exports.test_bindings = [
     ["a.b.c",         "t1"],
     ["a.*.c",         "t2"],

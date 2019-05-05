@@ -15,7 +15,7 @@ function read_all(s, cb) {
     s.on('end', () => cb(Buffer.concat(bufs)));
 
     s.on('readable', function () {
-        while (true) {
+        while (true) { // eslint-disable-line no-constant-condition
             const data = this.read();
             if (data === null) {
                 break;
@@ -28,7 +28,7 @@ function read_all(s, cb) {
 describe('qlobber-pq', function () {
     let qpg;
     let random_hash;
-    let random_path = path.join(__dirname, 'random');
+    let random_path = path.join(__dirname, 'fixtures', 'random');
 
     before(function (cb) {
         const buf = randomBytes(1024 * 1024);
@@ -42,7 +42,7 @@ describe('qlobber-pq', function () {
         const qpg = new QlobberPG(Object.assign({
             name: 'test1' 
         }, config, options));
-        qpg.on('warning', console.error);
+        qpg.on('warning', console.error); // eslint-disable-line no-console
         if (cb) {
             return qpg.on('start', () => cb(null, qpg));
         }
@@ -79,15 +79,15 @@ describe('qlobber-pq', function () {
     }
 
     function count(qpg, cb) {
-        qpg._queue.push(cb => qpg._client.query('SELECT id FROM messages', cb),
-                        iferr(cb, r => cb(null, r.rows.length)));
+        qpg._queue.push(
+            cb => qpg._client.query('SELECT id FROM messages', cb),
+            iferr(cb, r => cb(null, r.rows.length)));
     }
 
     it('should subscribe and publish to a simple topic', function (done) {
         let pub_info, sub_info;
 
-        function check()
-        {
+        function check() {
             if (pub_info && sub_info) {
                 pub_info.id = sub_info.id;
                 pub_info.data = sub_info.data;
@@ -253,7 +253,7 @@ describe('qlobber-pq', function () {
             expect(info.topic).to.equal('foo');
             expect(data.toString()).to.equal('bar');
             done();
-        }
+        };
 
         qpg.subscribe('*', handler, iferr(done, () => {
             qpg.subscribe('#', handler, iferr(done, () => {
@@ -322,7 +322,7 @@ describe('qlobber-pq', function () {
                 qpg.publish('foo', 'bar', iferr(done, () => {}));
             }));
         }));
-    })
+    });
 
     it('should support a work queue', function (done) {
         qpg.subscribe('foo', function (data, info, cb) {
@@ -359,8 +359,9 @@ describe('qlobber-pq', function () {
                 expect(info.single).to.be.true;
                 expect(data.toString()).to.equal('bar');
 
-                setTimeout(() => cb(null, iferr(done, () => qpg2.stop(done))),
-                           2000);
+                setTimeout(
+                    () => cb(null, iferr(done, () => qpg2.stop(done))),
+                    2000);
             }
 
             parallel([
@@ -534,7 +535,7 @@ describe('qlobber-pq', function () {
                 called = true;
             },
 
-            function (info, handlers, cb) {
+            function () {
                 done(new Error('should not be called'));
             }
         );
@@ -561,7 +562,7 @@ describe('qlobber-pq', function () {
                 called = true;
             },
 
-            function (info, handlers, cb) {
+            function () {
                 done(new Error('should not be called'));
             }
         );
@@ -776,8 +777,7 @@ describe('qlobber-pq', function () {
 
         let count = 0;
 
-        function handler(data, info, cb)
-        {
+        function handler(data, info, cb) {
             if (++count > 2) {
                 return done(new Error('should not be called'));
             }
@@ -807,8 +807,7 @@ describe('qlobber-pq', function () {
 
         let count = 0;
 
-        function handler(data, info, cb)
-        {
+        function handler(data, info, cb) {
             if (++count > 2) {
                 return done(new Error('should not be called'));
             }
@@ -905,7 +904,7 @@ describe('qlobber-pq', function () {
 
     it('should fail to publish and subscribe to messages with > 255 character topics', function (done) {
         const arr = [];
-        arr.length = 257
+        arr.length = 257;
         const topic = arr.join('a');
 
         qpg.subscribe(topic, () => {}, err => {
@@ -997,7 +996,7 @@ describe('qlobber-pq', function () {
             let len = 0;
 
             stream.on('readable', function () {
-                while (true) {
+                while (true) { // eslint-disable-line no-constant-condition
                     const chunk = stream.read();
                     if (!chunk) {
                         break;
@@ -1124,7 +1123,7 @@ describe('qlobber-pq', function () {
             let len = 0;
 
             stream.on('readable', function () {
-                while (true) {
+                while (true) { // eslint-disable-line no-constant-condition
                     const chunk = stream.read();
                     if (!chunk) {
                         break;
@@ -1246,7 +1245,7 @@ describe('qlobber-pq', function () {
                     expect(in_call).to.equal(count % 2);
                     ++in_call;
                     ++count;
-                    console.log(count);
+                    console.log(count); // eslint-disable-line no-console
 
                     stream.on('end', function () {
                         --in_call;
@@ -1351,7 +1350,7 @@ describe('qlobber-pq', function () {
     });
 
     it('should pass back write errors when publishing', function (done) {
-        orig_query = qpg._client.query;
+        const orig_query = qpg._client.query;
         qpg._client.query = function (...args) {
             const cb = args[args.length - 1];
             cb(new Error('dummy error'));
@@ -1385,7 +1384,7 @@ describe('qlobber-pq', function () {
         after_each(iferr(done, () => {
             before_each(iferr(done, () => {
                 let called = false;
-                qpg.subscribe('foo', function (data, info, cb) {
+                qpg.subscribe('foo', function (data, info) {
                     expect(info.topic).to.equal('foo');
                     expect(data.toString()).to.equal('bar');
                     expect(info.single).to.be.false;
@@ -1393,7 +1392,7 @@ describe('qlobber-pq', function () {
                 }, iferr(done, () => {
                     qpg.publish('foo', 'bar');
                     qpg.publish('foo', 'bar', { single: true });
-                }))
+                }));
                 setTimeout(() => {
                     expect(called).to.be.true;
                     done();
@@ -1460,7 +1459,7 @@ describe('qlobber-pq', function () {
             before_each(iferr(done, () => {
                 const streams = [];
 
-                function handler(s, info) {
+                function handler(s) {
                     streams.push(s);
 
                     if (streams.length === 1) {
@@ -1501,12 +1500,11 @@ describe('qlobber-pq', function () {
                 // Need to leave enough time between ttls to account for time
                 // increasing while publishing
                 for (let i = 0; i < n; ++i) {
-                    ttls_out.push(Math.round(
-
-                    Math.random() * 18 * 60 // random mins up to 18 hour period
-                    + 1 * 60)               // plus one hour
-
-                    * 60 * 1000);           // convert to milliseconds
+                    ttls_out.push(
+                        Math.round(
+                            Math.random() * 18 * 60 // random mins up to 18 hour period
+                            + 1 * 60)               // plus one hour
+                        * 60 * 1000);               // convert to milliseconds
                 }
 
                 function num_sort(x, y) {

@@ -11,9 +11,6 @@ const global_lock = -1;
 
 types.setTypeParser(20 /* int8, bigserial */, BigInt);
 
-// TODO:
-// Tests from qlobber-fsq
-
 // Note: Publish topics should be restricted to A-Za-z0-9_
 //       (ltree will error otherwise)
 //       Subscriptions should be restricted A-Za-z0-9_*#

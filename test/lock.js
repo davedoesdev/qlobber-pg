@@ -39,6 +39,7 @@ it('should block lock', function (done) {
                 let locked1 = true;
                 let locked2 = false;
                 client2.query('SELECT pg_advisory_lock($1)', [ 0 ], iferr(done, r => {
+                    expect(r.rows[0].pg_advisory_lock).to.equal('');
                     expect(locked1).to.be.false;
                     locked2 = true;
                     client.end(iferr(done, () => {

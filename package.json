@@ -1,5 +1,5 @@
 {
-  "name": "qlobber-fsq",
+  "name": "qlobber-pg",
   "description": "PostgreSQL-based pub-sub and workqueues. Supports AMQP-like wildcard topics.",
   "version": "0.0.1",
   "homepage": "https://github.com/davedoesdev/qlobber-pg",
@@ -19,7 +19,9 @@
   "main": "index.js",
   "scripts": {
     "migrate": "node-pg-migrate",
-    "test": "mocha"
+    "lint": "eslint *.js migrations/*.js && eslint -c .eslint.test.json test/*.js",
+    "test": "mocha",
+    "coverage": "nyc npm test && nyc report -r lcov && nyc check-coverage --statements 90 --branches 90 --functions 90 --lines 90"
   },
   "directories": {
     "test": "test"
@@ -46,7 +48,9 @@
   "devDependencies": {
     "chai": "^4.2.0",
     "cp-remote": "^0.2.0",
+    "eslint": "^5.16.0",
     "mocha": "^6.1.2",
+    "nyc": "^14.1.0",
     "wu": "^2.1.0",
     "yargs": "^13.2.2"
   }
