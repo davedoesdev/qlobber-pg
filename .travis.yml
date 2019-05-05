@@ -29,6 +29,7 @@ before_install:
   - whoami
 before_script:
   - psql -c 'create database "qlobber-pg";'
+  - psql test -c 'CREATE EXTENSION IF NOT EXISTS ltree;'
   - npm run migrate up
 script:
   - npm run $TARGET
