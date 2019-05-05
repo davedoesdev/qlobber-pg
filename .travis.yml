@@ -27,7 +27,7 @@ before_install:
   - nvm alias default "$(nvm current)"
   - ssh localhost node --version
 before_script:
-  - psql -c 'create database qlobber-pg;' -U postgres
+  - psql -c 'create database "qlobber-pg";' -U postgres
   - npm run migrate up
 script:
   - npm run $TARGET
