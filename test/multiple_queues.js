@@ -17,6 +17,18 @@ describe('multiple queues', function () {
     const timeout = 10 * 60 * 1000;
     this.timeout(timeout);
 
+    let interval_handle;
+
+    beforeEach(function () {
+        interval_handle = setInterval(function () {
+            console.log('still alive');
+        }, 60 * 1000);
+    });
+
+    afterEach(function () {
+        clearInterval(interval_handle);
+    });
+
     function publish_to_queues(name, num_queues, num_messages, max_message_size, get_single) {
         it(`should publish to multiple queues (${name}, num_queues=${num_queues}, num_messages=${num_messages}, max_message_size=${max_message_size})`, function (done) {
             let num_single = 0;
