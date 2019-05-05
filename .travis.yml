@@ -1,0 +1,29 @@
+sudo: required
+language: node_js
+node_js:
+  - 8
+  - 10
+  - 12
+addons:
+  apt:
+    packages:
+      - socat
+env:
+  matrix:
+    - TARGET=test
+    - TARGET=test-multi
+    - TARGET=test-remote
+    - TARGET=ci-coverage
+before_install:
+  - ssh-keygen -t rsa -f ~/.ssh/id_rsa -N ''
+  - cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
+  - ssh-keyscan -t rsa localhost >> ~/.ssh/known_hosts
+  - echo PATH=\"$(dirname "$(which python)"):\$PATH\" > ~/.bashrc.new
+  - echo . ~/.nvm/nvm.sh > ~/.bashrc.new
+  - cat ~/.bashrc >> ~/.bashrc.new
+  - mv ~/.bashrc.new ~/.bashrc
+  - cat ~/.bashrc
+  - nvm alias default "$(nvm current)"
+  - ssh localhost node --version
+script:
+  - npm run $TARGET

@@ -1,6 +1,6 @@
 const options = JSON.parse(Buffer.from(process.argv[2], 'hex'));
 const { queue } = require('async');
-const { QlobberPG } = require('..');
+const { QlobberPG } = require('../..');
 const host = require('os').hostname();
 const cbs = {};
 let cb_count = 0;
