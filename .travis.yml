@@ -26,6 +26,7 @@ before_install:
   - cat ~/.bashrc
   - nvm alias default "$(nvm current)"
   - ssh localhost node --version
+  - sudo mount -o remount,size=50% /var/ramfs
 before_script:
   - psql -c 'create database "qlobber-pg";'
   - psql qlobber-pg -c 'CREATE EXTENSION IF NOT EXISTS ltree;'
