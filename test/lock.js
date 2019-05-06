@@ -30,7 +30,7 @@ describe('locking', function () {
         await client.end();
     });
 
-    it('should block lock', function (done2) {
+    it('should block lock', function (done) {
         this.timeout(5000);
 
         const client = new Client(config.db);
