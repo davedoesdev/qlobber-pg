@@ -1,4 +1,8 @@
 exports.up = pgm => {
+    pgm.createExtension('ltree', {
+        ifNotExists: true
+    });
+
     pgm.createTable('messages', {
         id: {
             type: 'bigserial',
@@ -38,4 +42,8 @@ exports.down = pgm => {
     });
 
     pgm.dropTable('messages');
+
+    pgm.dropExtension('ltree', {
+        ifExists: true
+    });
 };

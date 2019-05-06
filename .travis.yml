@@ -29,7 +29,6 @@ before_install:
   - sudo mount -o remount,size=50% /var/ramfs
 before_script:
   - psql -c 'create database "qlobber-pg";'
-  - psql qlobber-pg -c 'CREATE EXTENSION IF NOT EXISTS ltree;'
   - npm run migrate up
 script:
   - npm run $TARGET
