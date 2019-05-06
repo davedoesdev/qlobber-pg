@@ -163,6 +163,8 @@ describe('multiple queues', function () {
         publish_to_queues3(5, 100 * 1024);
     } else {
         publish_to_queues3(10, 100 * 1024);
-        publish_to_queues3(50, 20 * 1024);
+        if (!process.env.CI) {
+            publish_to_queues3(50, 20 * 1024);
+        }
     }
 });

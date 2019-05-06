@@ -30,7 +30,9 @@ describe('locking', function () {
         await client.end();
     });
 
-    it('should block lock', function (done) {
+    it('should block lock', function (done2) {
+        this.timeout(5000);
+
         const client = new Client(config.db);
         client.connect(iferr(done, () => {
             const client2 = new Client(config.db);
@@ -43,9 +45,9 @@ describe('locking', function () {
                         expect(r.rows[0].pg_advisory_lock).to.equal('');
                         expect(locked1).to.be.false;
                         locked2 = true;
-                        client.end(iferr(done, () => {
+                        setTimeout(() => client.end(iferr(done, () => {
                             client2.end(done);
-                        }));
+                        })), 1000);
                     }));
                     setTimeout(() => {
                         expect(locked2).to.be.false;
