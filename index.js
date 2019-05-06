@@ -919,10 +919,16 @@ class QlobberPG extends EventEmitter {
         s.once('buffer', insert);
 
         s.once('error', function (err) {
+            let called = false;
+            function done() {
+                if (!called) {
+                    called = true;
+                    cb2(err);
+                }
+            }
             this.removeListener('buffer', insert);
-            this.once('close', () => {
-                cb2(err);
-            });
+            this.once('close', done);
+            this.once('finish', done);
             this.end();
         });
 
