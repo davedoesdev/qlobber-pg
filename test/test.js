@@ -1233,38 +1233,42 @@ describe('qlobber-pq', function () {
         }));
     });
 
-    it('should by able to read more than one message at a time', function (done) {
+    it('should be able to read more than one message at a time', function (done) {
         this.timeout(2 * 60 * 1000);
 
         after_each(iferr(done, () => {
             before_each(iferr(done, () => {
                 let in_call = 0;
                 let count = 0;
+                let prev_stream = null;
 
                 function handler(stream, info, cb) {
-                    expect(in_call).to.equal(count % 2);
                     ++in_call;
                     ++count;
                     console.log(count); // eslint-disable-line no-console
 
-                    stream.on('end', function () {
-                        --in_call;
-                        cb(null, (count === 25) && (in_call === 0) ? done : null);
-                    });
+                    if (count % 2 === 1) {
+                        expect(prev_stream).to.be.null;
+                        prev_stream = stream;
+                    } else {
+                        expect(prev_stream).not.to.be.null;
 
-                    if (count === 25) {
-                        return stream.on('data', () => {});
+                        stream.on('data', () => {});
+                        prev_stream.on('data', () => {});
+
+                        prev_stream = null;
                     }
 
-                    // Give time for other reads to start.
-                    setTimeout(() => {
-                        stream.on('data', () => {});
-                    }, 5 * 1000);
+
+                    stream.on('end', function () {
+                        --in_call;
+                        cb(null, (count === 26) && (in_call === 0) ? done : null);
+                    });
                 }
                 handler.accept_stream = true;
 
                 qpg.subscribe('foo', handler, iferr(done, () => {
-                    for (let i = 0; i < 25; ++i) {
+                    for (let i = 0; i < 26; ++i) {
                         qpg.publish('foo', 'bar', {
                             ttl: 2 * 60 * 1000,
                             single: true
@@ -1272,7 +1276,7 @@ describe('qlobber-pq', function () {
                     }
                 }));
             }), {
-                poll_interval: 10 * 1000,
+                poll_interval: 1 * 1000,
                 notify: false,
                 message_concurrency: 2
             });
