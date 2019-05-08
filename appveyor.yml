@@ -21,7 +21,7 @@ install:
   - npm install
 
 test_script:
-  - psql -c "create database 'qlobber-pg';"
+  - C:\Program Files\PostgreSQL\10.1\bin\psql -c "create database 'qlobber-pg';"
   - node --version
   - npm --version
   - npm run %TARGET%
