@@ -22,7 +22,7 @@ install:
   - npm install
 
 test_script:
-  - "SET PATH=%POSTGRES_PATH%\\bin;%PATH"
+  - "SET PATH=%POSTGRES_PATH%\\bin;%PATH%"
   - echo %PATH%
   - psql -c "create database 'qlobber-pg';"
   - node --version
