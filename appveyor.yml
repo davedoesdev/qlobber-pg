@@ -1,12 +1,12 @@
 environment:
   matrix:
-    - nodejs_version: "12"
+    - nodejs_version: "12.2.0"
       TARGET: test
-    - nodejs_version: "12"
+    - nodejs_version: "12.2.0"
       TARGET: test-multi
-    - nodejs_version: "10"
+    - nodejs_version: "10.15.3"
       TARGET: test
-    - nodejs_version: "10"
+    - nodejs_version: "10.15.3"
       TARGET: test-multi
 
 install:
