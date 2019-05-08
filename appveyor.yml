@@ -1,7 +1,7 @@
 environment:
   NODE_CONFIG: '{"db": {"host": "localhost", "password": "Password12!"}}'
   PGPASSWORD: Password12!
-  PSQL: C:\Program Files\PostgreSQL\10.1\bin\psql
+  POSTGRES_PATH: C:\Program Files\PostgreSQL\10.1
   matrix:
     - nodejs_version: "12.2.0"
       TARGET: test
@@ -22,7 +22,9 @@ install:
   - npm install
 
 test_script:
-  - %psql% -c "create database 'qlobber-pg';"
+  - "SET PATH=%POSTGRES_PATH%\\bin;%PATH"
+  - echo %PATH%
+  - psql -c "create database 'qlobber-pg';"
   - node --version
   - npm --version
   - npm run %TARGET%
