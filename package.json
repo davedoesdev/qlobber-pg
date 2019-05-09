@@ -20,11 +20,11 @@
   "scripts": {
     "migrate": "node-pg-migrate",
     "lint": "eslint *.js migrations/*.js && eslint -c .eslint.test.json test/*.js",
-    "test": "mocha",
+    "test": "mocha --bail",
     "coverage": "nyc npm test && nyc report -r lcov && nyc check-coverage --statements 90 --branches 90 --functions 90 --lines 90",
     "ci-coverage": "npm run coverage && cat coverage/lcov.info | coveralls",
-    "test-multi": "mocha test/rabbitmq.js --multi",
-    "test-remote": "mocha test/rabbitmq.js --remote=localhost --remote=localhost"
+    "test-multi": "mocha --bail test/rabbitmq.js --multi",
+    "test-remote": "mocha --bail test/rabbitmq.js --remote=localhost --remote=localhost"
   },
   "directories": {
     "test": "test"
