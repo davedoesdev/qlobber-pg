@@ -9,6 +9,18 @@ const wu = require('wu');
 const config = require('config');
 const iferr = require('iferr');
 
+const orig_it = it;
+it = function(s, f) {
+    orig_it(s, function (done) {
+        f.call(this, err => {
+            if (err) {
+                console.error(err);
+            }
+            done(err);
+        });
+    });
+};
+
 function read_all(s, cb) {
     const bufs = [];
 
