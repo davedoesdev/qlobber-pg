@@ -462,7 +462,16 @@ function make_RemoteMPQPG(hosts) {
 
 describe('rabbit', function () {
     if (argv.remote) {
-        const hosts = typeof argv.remote === 'string' ? [argv.remote] : argv.remote;
+        let hosts;
+        if (argv.remote === true) {
+            hosts = ['localhost', 'localhost'];
+        } else if (typeof argv.remote === 'string') {
+            hosts = [argv.remote];
+        } else if (argv.remote[0] === true) {
+            hosts = argv.remote.slice(1);
+        } else {
+            hosts = argv.remote;
+        }
         rabbitmq4('distributed', make_RemoteMPQPG(hosts), hosts.length);
     } else if (argv.multi) {
         rabbitmq4('multi-process', MPQPG, argv.queues || cpus().length);

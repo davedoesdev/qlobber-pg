@@ -19,12 +19,12 @@
   "main": "index.js",
   "scripts": {
     "migrate": "node-pg-migrate",
-    "lint": "eslint *.js migrations/*.js && eslint -c .eslint.test.json test/*.js",
+    "lint": "eslint *.js migrations/*.js && eslint -c .eslint.test.json test/*.js test/fixtures/*.js",
     "test": "mocha --bail",
     "coverage": "nyc npm test && nyc report -r lcov && nyc check-coverage --statements 90 --branches 90 --functions 90 --lines 90",
     "ci-coverage": "npm run coverage && cat coverage/lcov.info | coveralls",
     "test-multi": "mocha --bail test/rabbitmq.js --multi",
-    "test-remote": "mocha --bail test/rabbitmq.js --remote=localhost --remote=localhost"
+    "test-remote": "mocha --bail test/rabbitmq.js --remote"
   },
   "directories": {
     "test": "test"

@@ -11,9 +11,9 @@ const global_lock = -1;
 
 types.setTypeParser(20 /* int8, bigserial */, BigInt);
 
-// Note: Publish topics should be restricted to A-Za-z0-9_
+// Note: Publish labels are restricted to A-Za-z0-9_
 //       (ltree will error otherwise)
-//       Subscriptions should be restricted A-Za-z0-9_*#
+//       Subscription labels are restricted to A-Za-z0-9_*#
 //       (qlobber-pg will error otherwise)
 
 class CollectStream extends Writable {
