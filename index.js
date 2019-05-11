@@ -660,8 +660,6 @@ class QlobberPG extends EventEmitter {
         const t = topic.split('.');
         const r = [];
         let asterisks = 0;
-        let hashes = 0; // eslint-disable-line no-unused-vars
-        //                 ^^^ ESLINT BUG! ^^^
         for (let i = 0; i < t.length; ++i) {
             const l = t[i];
             switch (l) {
@@ -673,10 +671,8 @@ class QlobberPG extends EventEmitter {
                 }
                 break;
             case '#':
-                ++hashes;
                 if (t[i+1] !== '#') {
                     r.push('*');
-                    hashes = 0;
                 }
                 break;
             default:
