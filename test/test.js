@@ -20,7 +20,7 @@ it = function(s, f) { // eslint-disable-line no-global-assign
         });
     });
 };
-it.only = orig_it.only;
+it.only = orig_it.only.bind(orig_it);
 
 function read_all(s, cb) {
     const bufs = [];
@@ -1422,9 +1422,9 @@ describe('qlobber-pq', function () {
 
     it('should error when publishing to a topic with an invalid character', function (done) {
         qpg.publish('\0foo', 'bar', err => {
-            expect(err.message).to.equal('invalid byte sequence for encoding "UTF8": 0x00');
+            expect(err.message).to.equal(`invalid publication topic: \0foo`);
             qpg.publish('foo@', 'bar', err => {
-                expect(err.message).to.equal('syntax error at position 3');
+                expect(err.message).to.equal(`invalid publication topic: foo@`);
                 done();
             });
         });
@@ -1434,7 +1434,7 @@ describe('qlobber-pq', function () {
         const arr = [];
         arr.length = 257;
         qpg.publish(arr.join('a'), 'bar', err => {
-            expect(err.message).to.equal('name of level is too long');
+            expect(err.message).to.equal(`topic too long: ${arr.join('a')}`);
             done();
         });
     });

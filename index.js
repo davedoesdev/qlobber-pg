@@ -15,9 +15,7 @@ const minus_one_n = BigInt(-1); // eslint and documentation fail on -1n
 types.setTypeParser(20 /* int8, bigserial */, BigInt);
 
 // Note: Publish labels are restricted to A-Za-z0-9_
-//       (ltree will error otherwise)
 //       Subscription labels are restricted to A-Za-z0-9_*#
-//       (qlobber-pg will error otherwise)
 
 class CollectStream extends Writable {
     constructor() {
@@ -772,6 +770,22 @@ class QlobberPG extends EventEmitter {
         return true;
     }
 
+    _valid_ptopic(topic, cb) {
+        if (!this._valid_topic_length(topic, cb)) {
+            return false;
+        }
+        if (topic === '') {
+            return true;
+        }
+        for (let label of topic.split('.')) {
+            if (!/^[A-Za-z0-9_]+$/.test(label)) {
+                cb(new Error(`invalid publication topic: ${topic}`));
+                return false;
+            }
+        }
+        return true;
+    }
+
     _ensure_extra_matcher() {
         if (!this._extra_matcher) {
             const extra_topics = new Map();
@@ -888,7 +902,7 @@ class QlobberPG extends EventEmitter {
             }
         };
 
-        if (!this._valid_topic_length(topic, cb2)) {
+        if (!this._valid_ptopic(topic, cb2)) {
             return;
         }
 
