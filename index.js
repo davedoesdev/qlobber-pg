@@ -916,13 +916,18 @@ class QlobberPG extends EventEmitter {
             }
             //console.log("PUBLISHING", this._name, topic, single);
             // Note: ltree will validate topic (maxlen 255) to A-Za-z0-9_
-            this._queue.push(cb => this._client.query("INSERT INTO messages(topic, expires, single, data, publisher) VALUES($1, $2, $3, decode($4::text, 'hex'), $5)", [
-                topic,
-                new Date(expires),
-                single,
-                data.toString('hex'),
-                this._name
-            ], cb), iferr(cb2, () => { 
+            this._queue.push(cb => {
+                if (this._chkstop()) {
+                    return cb(new Error('stopped'));
+                }
+                this._client.query("INSERT INTO messages(topic, expires, single, data, publisher) VALUES($1, $2, $3, decode($4::text, 'hex'), $5)", [
+                    topic,
+                    new Date(expires),
+                    single,
+                    data.toString('hex'),
+                    this._name
+                ], cb);
+            }, iferr(cb2, () => {
                 //console.log("PUBLISHED", this._name, topic, single);
                 cb2(null, {
                     topic,

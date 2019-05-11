@@ -1940,9 +1940,10 @@ describe('qlobber-pq', function () {
 
             it('should support unsubscribing from delayed existing messages (by handler)', function (done) {
                 unsub_delayed_existing(function (handler, handler2, cb) {
-                    qpg.unsubscribe('foo', handler, iferr(cb, () => {
-                        qpg.unsubscribe('foo', handler2, cb);
-                    }));
+                    parallel([
+                        cb => qpg.unsubscribe('foo', handler, cb),
+                        cb => qpg.unsubscribe('foo', handler2, cb)
+                    ], cb);
                 }, done);
             });
 
