@@ -14,7 +14,7 @@ it = function(s, f) { // eslint-disable-line no-global-assign
     return orig_it(s, function (done) {
         f.call(this, err => {
             if (err) {
-                console.error(err); // eslint-disable-line no-console
+                console.error('DONE', err); // eslint-disable-line no-console
             }
             done(err);
         });
