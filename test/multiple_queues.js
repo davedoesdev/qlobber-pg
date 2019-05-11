@@ -21,7 +21,7 @@ describe('multiple queues', function () {
 
     beforeEach(function () {
         interval_handle = setInterval(function () {
-            console.log('still alive');
+            console.log('still alive'); // eslint-disable-line no-console
         }, 60 * 1000);
     });
 

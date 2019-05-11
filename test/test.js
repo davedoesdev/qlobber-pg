@@ -10,11 +10,11 @@ const config = require('config');
 const iferr = require('iferr');
 
 const orig_it = it;
-it = function(s, f) {
+it = function(s, f) { // eslint-disable-line no-global-assign
     orig_it(s, function (done) {
         f.call(this, err => {
             if (err) {
-                console.error(err);
+                console.error(err); // eslint-disable-line no-console
             }
             done(err);
         });

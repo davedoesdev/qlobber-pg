@@ -9,6 +9,9 @@ const escape = require('pg-escape');
 
 const global_lock = -1;
 
+/* global BigInt */
+const minus_one_n = BigInt(-1); // eslint and documentation fail on -1n
+
 types.setTypeParser(20 /* int8, bigserial */, BigInt);
 
 // Note: Publish labels are restricted to A-Za-z0-9_
@@ -41,8 +44,8 @@ class QlobberPG extends EventEmitter {
         this._db = options.db;
         this._single_ttl = options.single_ttl || (60 * 60 * 1000); // 1h
         this._multi_ttl = options.multi_ttl || (60 * 1000); // 1m
-        this._expire_interval = options.expire_interval || (10 * 1000) // 10s
-        this._check_interval = options.poll_interval || (1 * 1000) // 1s
+        this._expire_interval = options.expire_interval || (10 * 1000); // 10s
+        this._check_interval = options.poll_interval || (1 * 1000); // 1s
         this._do_dedup = options.dedup === undefined ? true : options.dedup;
         this._do_single = options.single === undefined ? true : options.single;
         this._order_by_expiry = options.order_by_expiry;
@@ -103,7 +106,7 @@ class QlobberPG extends EventEmitter {
         this._client.on('error', this.emit.bind(this, 'error'));
 
         if (options.notify !== false) {
-            this._client.on('notification', msg => {
+            this._client.on('notification', () => {
                 if (this._chkstop()) {
                     return;
                 }
@@ -175,7 +178,7 @@ class QlobberPG extends EventEmitter {
 
     _warning(err) {
         if (err && !this.emit('warning', err)) {
-            console.error(err);
+            console.error(err); // eslint-disable-line no-console
         }
         return err;
     }
@@ -258,7 +261,7 @@ class QlobberPG extends EventEmitter {
                     //console.log("GOTMSG", this._name, msg);
                     let last_id = this._last_ids.get(msg.publisher);
                     if (last_id === undefined) {
-                        last_id = -1n;
+                        last_id = minus_one_n;
                     }
                     if (msg.id > last_id) {
                         last_ids.set(msg.publisher, msg.id);
@@ -270,7 +273,7 @@ class QlobberPG extends EventEmitter {
                     return;
                 }
                 if (err) {
-                    return this.emit('error', err);;
+                    return this.emit('error', err);
                 }
                 //console.log("LAST_IDS UPDATE", this._name, last_ids);
                 for (let [publisher, id] of last_ids) {
@@ -579,7 +582,7 @@ class QlobberPG extends EventEmitter {
 
         let last_id = this._last_ids.get(payload.publisher);
         if (last_id === undefined) {
-            last_id = -1n;
+            last_id = minus_one_n;
         }
 
         if (payload.id <= last_id) {
@@ -650,14 +653,15 @@ class QlobberPG extends EventEmitter {
     }
 
     stop_watching(cb) { // qlobber-fsq compatibility
-        stop(cb);
+        this.stop(cb);
     }
 
     _ltreeify(topic) {
         const t = topic.split('.');
         const r = [];
         let asterisks = 0;
-        let hashes = 0;
+        let hashes = 0; // eslint-disable-line no-unused-vars
+        //                 ^^^ ESLINT BUG! ^^^
         for (let i = 0; i < t.length; ++i) {
             const l = t[i];
             switch (l) {
@@ -675,7 +679,6 @@ class QlobberPG extends EventEmitter {
                     hashes = 0;
                 }
                 break;
-
             default:
                 r.push(l);
                 break;
@@ -902,7 +905,7 @@ class QlobberPG extends EventEmitter {
                     single,
                     size: data.length,
                     publisher: this._name
-                })
+                });
             }));
         };
 

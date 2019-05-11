@@ -19,12 +19,13 @@
   "main": "index.js",
   "scripts": {
     "migrate": "node-pg-migrate",
-    "lint": "eslint *.js migrations/*.js && eslint -c .eslint.test.json test/*.js test/fixtures/*.js",
+    "lint": "eslint *.js migrations/*.js && eslint -c .eslintrc.test.json test/*.js test/fixtures/*.js",
     "test": "mocha --bail",
     "coverage": "nyc npm test && nyc report -r lcov && nyc check-coverage --statements 90 --branches 90 --functions 90 --lines 90",
     "ci-coverage": "npm run coverage && cat coverage/lcov.info | coveralls",
     "test-multi": "mocha --bail test/rabbitmq.js --multi",
-    "test-remote": "mocha --bail test/rabbitmq.js --remote"
+    "test-remote": "mocha --bail test/rabbitmq.js --remote",
+    "docs": "documentation build index.js -f html -o docs"
   },
   "directories": {
     "test": "test"
@@ -52,6 +53,7 @@
     "chai": "^4.2.0",
     "coveralls": "^3.0.3",
     "cp-remote": "^0.2.0",
+    "documentation": "^11.0.0",
     "eslint": "^5.16.0",
     "mocha": "^6.1.2",
     "nyc": "^14.1.0",
