@@ -11,7 +11,7 @@ const iferr = require('iferr');
 
 const orig_it = it;
 it = function(s, f) { // eslint-disable-line no-global-assign
-    orig_it(s, function (done) {
+    return orig_it(s, function (done) {
         f.call(this, err => {
             if (err) {
                 console.error(err); // eslint-disable-line no-console
@@ -20,6 +20,7 @@ it = function(s, f) { // eslint-disable-line no-global-assign
         });
     });
 };
+it.only = orig_it.only;
 
 function read_all(s, cb) {
     const bufs = [];
@@ -920,9 +921,9 @@ describe('qlobber-pq', function () {
         const topic = arr.join('a');
 
         qpg.subscribe(topic, () => {}, err => {
-            expect(err.message).to.equal('name of level is too long');
+            expect(err.message).to.equal(`topic too long: ${topic}`);
             qpg.publish(topic, 'bar', { ttl: 1000 }, err => {
-                expect(err.message).to.equal('name of level is too long');
+                expect(err.message).to.equal(`topic too long: ${topic}`);
                 done();
             });
         });

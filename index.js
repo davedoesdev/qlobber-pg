@@ -746,7 +746,18 @@ class QlobberPG extends EventEmitter {
         }), cb);
     }
 
+    _valid_topic_length(topic, cb) {
+        if (topic.length > 255) {
+            cb(new Error(`topic too long: ${topic}`));
+            return false;
+        }
+        return true;
+    }
+
     _valid_stopic(topic, cb) {
+        if (!this._valid_topic_length(topic, cb)) {
+            return false;
+        }
         if (topic === '') {
             return true;
         }
@@ -754,7 +765,7 @@ class QlobberPG extends EventEmitter {
             if ((label !== '*') &&
                 (label !== '#') &&
                 !/^[A-Za-z0-9_]+$/.test(label)) {
-                cb(new Error('invalid subscription topic: ' + topic));
+                cb(new Error(`invalid subscription topic: ${topic}`));
                 return false;
             }
         }
@@ -799,7 +810,7 @@ class QlobberPG extends EventEmitter {
             }
         };
 
-        if (!this._valid_stopic(topic, cb)) {
+        if (!this._valid_stopic(topic, cb2)) {
             return;
         }
 
@@ -876,6 +887,10 @@ class QlobberPG extends EventEmitter {
                 cb.call(this, err, ...args);
             }
         };
+
+        if (!this._valid_topic_length(topic, cb2)) {
+            return;
+        }
 
         const now = Date.now();
         const expires = now + (options.ttl || (options.single ? this._single_ttl : this._multi_ttl));
