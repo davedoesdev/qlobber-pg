@@ -34,6 +34,76 @@ class CollectStream extends Writable {
     }
 }
 
+/**
+ * Creates a new `QlobberPG` object for publishing and subscribing to a
+ * PostgreSQL queue.
+ *
+ * @param {Object} options - Configures the PostgreSQL queue.
+ * @param {String} options.name - Unique identifier for this `QlobberPG`
+ *     instance. Every instance connected to the queue at the same time
+ *     must have a different name.
+ * @param {Object} options.db - [`node-postgres` configuration](https://node-postgres.com/api/client)
+ *     used for communicating with PostgreSQL.
+ * @param {Integer} [options.single_ttl=1h] - Default time-to-live
+ *     (in milliseconds) for messages which should be read by at most one
+ *     subscriber. This value is added to the current time and the resulting
+ *     expiry time is put into the message's database row. After the expiry
+ *     time, the message is ignored and deleted when convenient.
+ * @param {Integer} [options.multi_ttl=1m] - Default time-to-live
+ *     (in milliseconds) for messages which can be read by many subscribers.
+ *     This value is added to the current time and the resulting expiry time is
+ *     put into the message's database row. After the expiry time, the message
+ *     is ignored and deleted when convenient.
+ * @param {Integer} [options.expire_interval=10s] - Number of milliseconds
+ *     between deleting expired messages from the database.
+ * @param {Integer} [options.poll_interval=1s] - Number of milliseconds between
+ *     checking the database for new messages.
+ * @param {Boolean} [options.notify=true] - Whether to use a database trigger
+ *     to watch for new messages. Note that this will be done in addition to
+ *     polling the database every `poll_interval` milliseconds.
+ * @param {Integer} [options.message_concurrency=1] - The number of messages
+ *     to process at once.
+ * @param {Integer} [options.handler_concurrency=0] - By default (0), a message
+ *     is considered handled by a subscriber only when all its data has been
+ *     read. If you set `handler_concurrency` to non-zero, a message is
+ *     considered handled as soon as a subscriber receives it. The next message
+ *     will then be processed straight away. The value of `handler_concurrency`
+ *     limits the number of messages being handled by subscribers at any one
+ *     time.
+ * @param {Boolean} [options.order_by_expiry=false] - Pass messages to
+ *     subscribers in order of their expiry time.
+ * @param {Boolean} [options.dedup=true] - Whether to ensure each handler
+ *     function is called at most once when a message is received.
+ * @param {Boolean} [options.single=true] - Whether to process messages meant
+ *     for _at most_ one subscriber (across all `QlobberPG` instances), i.e.
+ *     work queues.
+ * @param {String} [options.separator='.'] - The character to use for separating
+ *     words in message topics.
+ * @param {String} [options.wildcard_one='*'] - The character to use for
+ *     matching exactly one word in a message topic to a subscriber.
+ * @param {String} [options.wildcard_some='#'] - The character to use for
+ *     matching zero or more words in a message topic to a subscriber.
+ * @param {Function | Array<Function>} [options.filter] - Function called before each message is processed.
+ * - The function signature is: `(info, handlers, cb(err, ready, filtered_handlers))`
+ * - You can use this to filter the subscribed handler functions to be called
+ *   for the message (by passing the filtered list as the third argument to
+ *   `cb`).
+ * - If you want to ignore the message _at this time_ then pass `false` as the
+ *   second argument to `cb`. `options.filter` will be called again later with
+ *   the same message.
+ * - Defaults to a function which calls `cb(null, true, handlers)`.
+ * - `handlers` is an ES6 Set, or array if `options.dedup` is falsey.
+ * - `filtered_handlers` should be an ES6 Set, or array if `options.dedup`
+ *   is falsey. If not, `new Set(filtered_handlers)` or
+ *   `Array.from(filtered_handlers)` will be used to convert it.
+ * - You can supply an array of filter functions - each will be called in turn
+ *   with the `filtered_handlers` from the previous one.
+ * - An array containing the filter functions is also available as the `filters`
+ *   property of the `QlobberPG` object and can be modified at any time.
+ * @param {Integer} [options.batch_size=100] - Passed to https://github.com/brianc/node-pg-query-stream[`node-pg-query-stream`]
+ *     and specifies how many messages to retrieve from the database at a time
+ *     (using a cursor).
+ */
 class QlobberPG extends EventEmitter {
     constructor(options) {
         super();
@@ -44,10 +114,11 @@ class QlobberPG extends EventEmitter {
         this._multi_ttl = options.multi_ttl || (60 * 1000); // 1m
         this._expire_interval = options.expire_interval || (10 * 1000); // 10s
         this._check_interval = options.poll_interval || (1 * 1000); // 1s
+        this._notify = options.notify == undefined ? true : options.notify;
         this._do_dedup = options.dedup === undefined ? true : options.dedup;
         this._do_single = options.single === undefined ? true : options.single;
         this._order_by_expiry = options.order_by_expiry;
-        this._batch_size = options.batch_size;
+        this._batch_size = options.batch_size || 100;
 
         this._topics = new Map();
         this._deferred = new Set();
@@ -103,7 +174,7 @@ class QlobberPG extends EventEmitter {
         this._client = new Client(this._db);
         this._client.on('error', this.emit.bind(this, 'error'));
 
-        if (options.notify !== false) {
+        if (this._notify !== false) {
             this._client.on('notification', () => {
                 if (this._chkstop()) {
                     return;
@@ -723,6 +794,9 @@ class QlobberPG extends EventEmitter {
     }
         
     _update_trigger(cb) {
+        if (!this._notify) {
+            return cb();
+        }
         this._queue.push(asyncify(async () => {
             if (this._chkstop()) {
                 throw new Error('stopped');

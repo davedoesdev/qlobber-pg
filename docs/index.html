@@ -1,0 +1,383 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset='utf-8' />
+  <title>qlobber-pg 0.0.1 | Documentation</title>
+  <meta name='description' content='PostgreSQL-based pub-sub and workqueues. Supports AMQP-like wildcard topics.'>
+  <meta name='viewport' content='width=device-width,initial-scale=1'>
+  <link href='assets/bass.css' rel='stylesheet' />
+  <link href='assets/style.css' rel='stylesheet' />
+  <link href='assets/github.css' rel='stylesheet' />
+  <link href='assets/split.css' rel='stylesheet' />
+</head>
+<body class='documentation m0'>
+    <div class='flex'>
+      <div id='split-left' class='overflow-auto fs0 height-viewport-100'>
+        <div class='py1 px2'>
+          <h3 class='mb0 no-anchor'>qlobber-pg</h3>
+          <div class='mb1'><code>0.0.1</code></div>
+          <input
+            placeholder='Filter'
+            id='filter-input'
+            class='col12 block input'
+            type='text' />
+          <div id='toc'>
+            <ul class='list-reset h5 py1-ul'>
+              
+                
+                <li><a
+                  href='#qlobberpg'
+                  class="">
+                  QlobberPG
+                  
+                </a>
+                
+                </li>
+              
+            </ul>
+          </div>
+          <div class='mt1 h6 quiet'>
+            <a href='https://documentation.js.org/reading-documentation.html'>Need help reading this?</a>
+          </div>
+        </div>
+      </div>
+      <div id='split-right' class='relative overflow-auto height-viewport-100'>
+        
+          
+          <section class='p2 mb2 clearfix bg-white minishadow'>
+
+  
+  <div class='clearfix'>
+    
+    <h3 class='fl m0' id='qlobberpg'>
+      QlobberPG
+    </h3>
+    
+    
+  </div>
+  
+
+  <p>Creates a new <code>QlobberPG</code> object for publishing and subscribing to a
+PostgreSQL queue.</p>
+
+    <div class='pre p1 fill-light mt0'>new QlobberPG(options: <a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Object">Object</a>)</div>
+  
+  
+    <p>
+      Extends
+      
+        EventEmitter
+      
+    </p>
+  
+
+  
+  
+  
+  
+  
+  
+
+  
+    <div class='py1 quiet mt1 prose-big'>Parameters</div>
+    <div class='prose'>
+      
+        <div class='space-bottom0'>
+          <div>
+            <span class='code bold'>options</span> <code class='quiet'>(<a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Object">Object</a>)</code>
+	    Configures the PostgreSQL queue.
+
+          </div>
+          
+          <table class='mt1 mb2 fixed-table h5 col-12'>
+            <colgroup>
+              <col width='30%' />
+              <col width='70%' />
+            </colgroup>
+            <thead>
+              <tr class='bold fill-light'>
+                <th>Name</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody class='mt1'>
+              
+                <tr>
+  <td class='break-word'><span class='code bold'>options.name</span> <code class='quiet'><a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/String">String</a></code>
+  </td>
+  <td class='break-word'><span>Unique identifier for this 
+<code>QlobberPG</code>
+
+instance. Every instance connected to the queue at the same time
+must have a different name.
+</span></td>
+</tr>
+
+
+              
+                <tr>
+  <td class='break-word'><span class='code bold'>options.db</span> <code class='quiet'><a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Object">Object</a></code>
+  </td>
+  <td class='break-word'><span><a href="https://node-postgres.com/api/client"><code>node-postgres</code> configuration</a>
+
+used for communicating with PostgreSQL.
+</span></td>
+</tr>
+
+
+              
+                <tr>
+  <td class='break-word'><span class='code bold'>options.single_ttl</span> <code class='quiet'>Integer</code>
+  
+    (default <code>1h</code>)
+  </td>
+  <td class='break-word'><span>Default time-to-live
+(in milliseconds) for messages which should be read by at most one
+subscriber. This value is added to the current time and the resulting
+expiry time is put into the message's database row. After the expiry
+time, the message is ignored and deleted when convenient.
+</span></td>
+</tr>
+
+
+              
+                <tr>
+  <td class='break-word'><span class='code bold'>options.multi_ttl</span> <code class='quiet'>Integer</code>
+  
+    (default <code>1m</code>)
+  </td>
+  <td class='break-word'><span>Default time-to-live
+(in milliseconds) for messages which can be read by many subscribers.
+This value is added to the current time and the resulting expiry time is
+put into the message's database row. After the expiry time, the message
+is ignored and deleted when convenient.
+</span></td>
+</tr>
+
+
+              
+                <tr>
+  <td class='break-word'><span class='code bold'>options.expire_interval</span> <code class='quiet'>Integer</code>
+  
+    (default <code>10s</code>)
+  </td>
+  <td class='break-word'><span>Number of milliseconds
+between deleting expired messages from the database.
+</span></td>
+</tr>
+
+
+              
+                <tr>
+  <td class='break-word'><span class='code bold'>options.poll_interval</span> <code class='quiet'>Integer</code>
+  
+    (default <code>1s</code>)
+  </td>
+  <td class='break-word'><span>Number of milliseconds between
+checking the database for new messages.
+</span></td>
+</tr>
+
+
+              
+                <tr>
+  <td class='break-word'><span class='code bold'>options.notify</span> <code class='quiet'><a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Boolean">Boolean</a></code>
+  
+    (default <code>true</code>)
+  </td>
+  <td class='break-word'><span>Whether to use a database trigger
+to watch for new messages. Note that this will be done in addition to
+polling the database every 
+<code>poll_interval</code>
+ milliseconds.
+</span></td>
+</tr>
+
+
+              
+                <tr>
+  <td class='break-word'><span class='code bold'>options.message_concurrency</span> <code class='quiet'>Integer</code>
+  
+    (default <code>1</code>)
+  </td>
+  <td class='break-word'><span>The number of messages
+to process at once.
+</span></td>
+</tr>
+
+
+              
+                <tr>
+  <td class='break-word'><span class='code bold'>options.handler_concurrency</span> <code class='quiet'>Integer</code>
+  
+    (default <code>0</code>)
+  </td>
+  <td class='break-word'><span>By default (0), a message
+is considered handled by a subscriber only when all its data has been
+read. If you set 
+<code>handler_concurrency</code>
+ to non-zero, a message is
+considered handled as soon as a subscriber receives it. The next message
+will then be processed straight away. The value of 
+<code>handler_concurrency</code>
+
+limits the number of messages being handled by subscribers at any one
+time.
+</span></td>
+</tr>
+
+
+              
+                <tr>
+  <td class='break-word'><span class='code bold'>options.order_by_expiry</span> <code class='quiet'><a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Boolean">Boolean</a></code>
+  
+    (default <code>false</code>)
+  </td>
+  <td class='break-word'><span>Pass messages to
+subscribers in order of their expiry time.
+</span></td>
+</tr>
+
+
+              
+                <tr>
+  <td class='break-word'><span class='code bold'>options.dedup</span> <code class='quiet'><a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Boolean">Boolean</a></code>
+  
+    (default <code>true</code>)
+  </td>
+  <td class='break-word'><span>Whether to ensure each handler
+function is called at most once when a message is received.
+</span></td>
+</tr>
+
+
+              
+                <tr>
+  <td class='break-word'><span class='code bold'>options.single</span> <code class='quiet'><a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Boolean">Boolean</a></code>
+  
+    (default <code>true</code>)
+  </td>
+  <td class='break-word'><span>Whether to process messages meant
+for 
+<em>at most</em>
+ one subscriber (across all 
+<code>QlobberPG</code>
+ instances), i.e.
+work queues.
+</span></td>
+</tr>
+
+
+              
+                <tr>
+  <td class='break-word'><span class='code bold'>options.separator</span> <code class='quiet'><a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/String">String</a></code>
+  
+    (default <code>&#39;.&#39;</code>)
+  </td>
+  <td class='break-word'><span>The character to use for separating
+words in message topics.
+</span></td>
+</tr>
+
+
+              
+                <tr>
+  <td class='break-word'><span class='code bold'>options.wildcard_one</span> <code class='quiet'><a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/String">String</a></code>
+  
+    (default <code>&#39;*&#39;</code>)
+  </td>
+  <td class='break-word'><span>The character to use for
+matching exactly one word in a message topic to a subscriber.
+</span></td>
+</tr>
+
+
+              
+                <tr>
+  <td class='break-word'><span class='code bold'>options.wildcard_some</span> <code class='quiet'><a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/String">String</a></code>
+  
+    (default <code>&#39;#&#39;</code>)
+  </td>
+  <td class='break-word'><span>The character to use for
+matching zero or more words in a message topic to a subscriber.
+</span></td>
+</tr>
+
+
+              
+                <tr>
+  <td class='break-word'><span class='code bold'>options.filter</span> <code class='quiet'>(<a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Statements/function">Function</a> | <a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Array">Array</a>&#x3C;<a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Statements/function">Function</a>>)?</code>
+  </td>
+  <td class='break-word'><span>Function called before each message is processed.
+<ul>
+<li>The function signature is: <code>(info, handlers, cb(err, ready, filtered_handlers))</code></li>
+<li>You can use this to filter the subscribed handler functions to be called
+for the message (by passing the filtered list as the third argument to
+<code>cb</code>).</li>
+<li>If you want to ignore the message <em>at this time</em> then pass <code>false</code> as the
+second argument to <code>cb</code>. <code>options.filter</code> will be called again later with
+the same message.</li>
+<li>Defaults to a function which calls <code>cb(null, true, handlers)</code>.</li>
+<li><code>handlers</code> is an ES6 Set, or array if <code>options.dedup</code> is falsey.</li>
+<li><code>filtered_handlers</code> should be an ES6 Set, or array if <code>options.dedup</code>
+is falsey. If not, <code>new Set(filtered_handlers)</code> or
+<code>Array.from(filtered_handlers)</code> will be used to convert it.</li>
+<li>You can supply an array of filter functions - each will be called in turn
+with the <code>filtered_handlers</code> from the previous one.</li>
+<li>An array containing the filter functions is also available as the <code>filters</code>
+property of the <code>QlobberPG</code> object and can be modified at any time.</li>
+</ul>
+</span></td>
+</tr>
+
+
+              
+                <tr>
+  <td class='break-word'><span class='code bold'>options.batch_size</span> <code class='quiet'>Integer</code>
+  
+    (default <code>100</code>)
+  </td>
+  <td class='break-word'><span>Passed to 
+<a href="https://github.com/brianc/node-pg-query-stream%5B%60node-pg-query-stream%60">https://github.com/brianc/node-pg-query-stream[<code>node-pg-query-stream</code></a>
+]
+and specifies how many messages to retrieve from the database at a time
+(using a cursor).
+</span></td>
+</tr>
+
+
+              
+            </tbody>
+          </table>
+          
+        </div>
+      
+    </div>
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+</section>
+
+          
+        
+      </div>
+    </div>
+  <script src='assets/anchor.js'></script>
+  <script src='assets/split.js'></script>
+  <script src='assets/site.js'></script>
+</body>
+</html>
