@@ -77,7 +77,16 @@ describe('qlobber-pq', function () {
     });
     
     function after_each(cb) {
+        if (this && this.timeout) {
+            this.timeout(5000);
+        }
         if (qpg) {
+            // We need to wait for tasks to complete otherwise we may
+            // get 'stopped' or 'Connection terminated' errors.
+            // Note there are separate tests for these cases.
+            if ((qpg._queue.running() > 0) || (qpg._queue.length() > 0)) {
+                return setTimeout(() => after_each.call(this, cb), 500);
+            }
             qpg.stop(cb);
         } else {
             cb();
@@ -993,6 +1002,173 @@ describe('qlobber-pq', function () {
                 }, iferr(done, () => {}));
             }));
         }));
+    });
+
+    it('should error if stopped while publishing', function (done) {
+        qpg.publish('foo', 'bar', err => {
+            expect(err.message).to.equal('stopped');
+            done();
+        });
+        qpg.stop();
+    });
+
+    it('should error if connection terminated while publishing', function (done) {
+        const orig_query = qpg._client.query;
+        qpg._client.query = function (...args) {
+            const r = orig_query.apply(this, args);
+            qpg.stop();
+            return r;
+        };
+        qpg.publish('foo', 'bar', err => {
+            expect(err.message).to.equal('Connection terminated');
+            done();
+        });
+    });
+
+    it('should error if stopped while subscribing', function (done) {
+        const orig_update_trigger = qpg._update_trigger;
+        let update_trigger_cb;
+        qpg._update_trigger = function (cb) {
+            update_trigger_cb = cb;
+        };
+        qpg.subscribe('foo', function (data, info, cb) {
+            orig_update_trigger.call(this, update_trigger_cb);
+            this.stop();
+        }, err => {
+            expect(err.message).to.equal('stopped');
+            done();
+        });
+        // Note: publish can't error because qpg._check query won't get to
+        // front of queue until publish task completes
+        qpg.publish('foo', 'bar', iferr(done, () => {}));
+    });
+
+    it('should error if connection terminated while subscribing', function (done) {
+        const orig_update_trigger = qpg._update_trigger;
+        let update_trigger_cb;
+        qpg._update_trigger = function (cb) {
+            update_trigger_cb = cb;
+        };
+        qpg.subscribe('foo', function (data, info, cb) {
+            const orig_query = qpg._client.query;
+            qpg._client.query = function (...args) {
+                const r = orig_query.apply(this, args);
+                qpg.stop();
+                return r;
+            };
+            orig_update_trigger.call(this, update_trigger_cb);
+        }, err => {
+            expect(err.message).to.equal('Connection terminated');
+            done();
+        });
+        // Note: publish can't error because qpg._check query won't get to
+        // front of queue until publish task completes
+        qpg.publish('foo', 'bar', iferr(done, () => {}));
+    });
+
+    it('should error if stopped while unsubscribing', function (done) {
+        const orig_update_trigger = qpg._update_trigger;
+        qpg._update_trigger = function (cb) {
+            this.stop();
+            orig_update_trigger.call(this, cb);
+        };
+        qpg.unsubscribe(err => {
+            expect(err.message).to.equal('stopped');
+            done();
+        });
+    });
+
+    it('should error if connection terminated while unsubscribing', function (done) {
+        const orig_update_trigger = qpg._update_trigger;
+        qpg._update_trigger = function (cb) {
+            const orig_query = qpg._client.query;
+            qpg._client.query = function (...args) {
+                const r = orig_query.apply(this, args);
+                qpg.stop();
+                return r;
+            };
+            orig_update_trigger.call(this, cb);
+        };
+        qpg.unsubscribe(err => {
+            expect(err.message).to.equal('Connection terminated');
+            done();
+        });
+    });
+
+    it("should not error if done while publishing (would be stopped error if after_each didn't wait)", function (done) {
+        qpg.publish('foo', 'bar', iferr(done, () => {}));
+        done();
+    });
+
+    it("should not error if done while publishing (would be Connection terminated error if after_each didn't wait)", function (done) {
+        const orig_query = qpg._client.query;
+        qpg._client.query = function (...args) {
+            qpg._client.query = orig_query;
+            const r = orig_query.apply(this, args);
+            done();
+            return r;
+        };
+        qpg.publish('foo', 'bar', iferr(done, () => {}));
+    });
+
+    it("should not error if done while subscribing (would be stopped error if after_each didn't wait)", function (done) {
+        const orig_update_trigger = qpg._update_trigger;
+        let update_trigger_cb;
+        qpg._update_trigger = function (cb) {
+            update_trigger_cb = cb;
+        };
+        qpg.subscribe('foo', function (data, info, cb) {
+            orig_update_trigger.call(this, update_trigger_cb);
+            done();
+        }, iferr(done, () => {}));
+        // Note: publish can't error because qpg._check query won't get to
+        // front of queue until publish task completes
+        qpg.publish('foo', 'bar', iferr(done, () => {}));
+    });
+
+    it("should not error if done while subscribing (would be Connection terminated error if after each didn't wait)", function (done) {
+        const orig_update_trigger = qpg._update_trigger;
+        let update_trigger_cb;
+        qpg._update_trigger = function (cb) {
+            update_trigger_cb = cb;
+        };
+        qpg.subscribe('foo', function (data, info, cb) {
+            const orig_query = qpg._client.query;
+            qpg._client.query = function (...args) {
+                qpg._client.query = orig_query;
+                const r = orig_query.apply(this, args);
+                done();
+                return r;
+            };
+            orig_update_trigger.call(this, update_trigger_cb);
+        }, iferr(done, () => {}));
+        // Note: publish can't error because qpg._check query won't get to
+        // front of queue until publish task completes
+        qpg.publish('foo', 'bar', iferr(done, () => {}));
+    });
+
+    it("should not error if done while unsubscribing (would be stopped error if after_each didn't wait)", function (done) {
+        const orig_update_trigger = qpg._update_trigger;
+        qpg._update_trigger = function (cb) {
+            done();
+            orig_update_trigger.call(this, cb);
+        };
+        qpg.unsubscribe(iferr(done, () => {}));
+    });
+
+    it("should not error if done while unsubscribing (would be Connection terminated error if after_each didn't wait)", function (done) {
+        const orig_update_trigger = qpg._update_trigger;
+        qpg._update_trigger = function (cb) {
+            const orig_query = qpg._client.query;
+            qpg._client.query = function (...args) {
+                qpg._client.query = orig_query;
+                const r = orig_query.apply(this, args);
+                done();
+                return r;
+            };
+            orig_update_trigger.call(this, cb);
+        };
+        qpg.unsubscribe(iferr(done, () => {}));
     });
 
     it('should support streaming interfaces', function (done) {
