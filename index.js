@@ -239,6 +239,11 @@ class QlobberPG extends EventEmitter {
     _chkstop() {
         if (this.stopped && this.active) {
             this.active = false;
+            /**
+              * Stop event.
+              *
+              * @event QlobberPG#stop
+              */
             this.emit('stop');
         }
 
@@ -262,6 +267,10 @@ class QlobberPG extends EventEmitter {
         }
     }
 
+    /**
+     * Check the database for new messages now rather than waiting for the next
+     * periodic check to occur.
+     */
     refresh_now() {
         if (this._expire_timeout) {
             clearTimeout(this._expire_timeout);
@@ -273,6 +282,9 @@ class QlobberPG extends EventEmitter {
         this._check_now();
     }
 
+    /**
+     * Same as {@link QlobberPG#refresh_now}.
+     */
     force_refresh() { // qlobber-fsq compatibility
         this.refresh_now();
     }
@@ -684,6 +696,13 @@ class QlobberPG extends EventEmitter {
         this._message_queue.push({ payload, cb });
     }
 
+    /**
+     * Stop checking for new messages.
+     *
+     * @param {Function} [cb] Optional function to call once access to the
+     *     database has stopped. Alternatively, you can listen for the
+     *     {@link QlobberPG#stop} event.
+     */
     stop(cb) {
         cb = cb || (err => {
             if (err) {
@@ -721,6 +740,9 @@ class QlobberPG extends EventEmitter {
         });
     }
 
+    /**
+     * Same as {@link QlobberPG#stop}.
+     */
     stop_watching(cb) { // qlobber-fsq compatibility
         this.stop(cb);
     }
