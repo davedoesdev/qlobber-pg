@@ -62,6 +62,12 @@
                         #stop_watching
                       </a></li>
                       
+                      <li><a
+                        href='#qlobberpgsubscribe'
+                        class='regular pre-open'>
+                        #subscribe
+                      </a></li>
+                      
                     </ul>
                   
                   
@@ -608,6 +614,194 @@ database has stopped. Alternatively, you can listen for the
           <div>
             <span class='code bold'>cb</span> <code class='quiet'>(any)</code>
 	    
+          </div>
+          
+        </div>
+      
+    </div>
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+</section>
+
+      </div>
+    </div>
+  
+    <div class='border-bottom' id='qlobberpgsubscribe'>
+      <div class="clearfix small pointer toggle-sibling">
+        <div class="py1 contain">
+            <a class='icon pin-right py1 dark-link caret-right'>▸</a>
+            <span class='code strong strong truncate'>subscribe(topic, handler, options?, cb?)</span>
+        </div>
+      </div>
+      <div class="clearfix display-none toggle-target">
+        <section class='p2 mb2 clearfix bg-white minishadow'>
+
+  
+
+  <p>Subscribe to messages in the PostgreSQL queue.</p>
+
+    <div class='pre p1 fill-light mt0'>subscribe(topic: <a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/String">String</a>, handler: <a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Statements/function">Function</a>, options: <a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Object">Object</a>?, cb: <a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Statements/function">Function</a>?)</div>
+  
+  
+
+  
+  
+  
+  
+  
+  
+
+  
+    <div class='py1 quiet mt1 prose-big'>Parameters</div>
+    <div class='prose'>
+      
+        <div class='space-bottom0'>
+          <div>
+            <span class='code bold'>topic</span> <code class='quiet'>(<a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/String">String</a>)</code>
+	    Which messages you're interested in receiving.
+Message topics are split into words using 
+<code>.</code>
+ as the separator. You can
+use 
+<code>*</code>
+ to match exactly one word in a topic or 
+<code>#</code>
+ to match zero or more
+words. For example, 
+<code>foo.*</code>
+ would match 
+<code>foo.bar</code>
+ whereas 
+<code>foo.#</code>
+ would
+match 
+<code>foo</code>
+, 
+<code>foo.bar</code>
+ and 
+<code>foo.bar.wup</code>
+. Note you can change the
+separator and wildcard characters by specifying the 
+<code>separator</code>
+,
+
+<code>wildcard_one</code>
+ and 
+<code>wildcard_some</code>
+ options when
+
+<a href="#qlobberpg">constructing</a>
+ 
+<code>QlobberPG</code>
+ objects. See the 
+<a href="https://github.com/davedoesdev/qlobber#qlobberoptions"><code>qlobber</code>
+documentation</a>
+
+for more information.
+
+          </div>
+          
+        </div>
+      
+        <div class='space-bottom0'>
+          <div>
+            <span class='code bold'>handler</span> <code class='quiet'>(<a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Statements/function">Function</a>)</code>
+	    Function to call when a new message is
+received on the PostgreSQL queue and its topic matches against 
+<code>topic</code>
+.
+
+<code>handler</code>
+ will be passed the following arguments:
+<ul>
+<li><strong><code>data</code></strong> (<a href="http://nodejs.org/api/stream.html#stream_class_stream_readable"><code>Readable</code></a> | <a href="http://nodejs.org/api/buffer.html#buffer_class_buffer"><code>Buffer</code></a>)
+Message payload as a Readable stream or a Buffer.
+By default you'll receive a Buffer. If <code>handler</code> has a property
+<code>accept_stream</code> set to a truthy value then you'll receive a stream.
+Note that <em>all</em> subscribers will receive the same stream or content for
+each message. You should take this into account when reading from the
+stream. The stream can be piped into multiple
+<a href="http://nodejs.org/api/stream.html#stream_class_stream_writable">Writable</a>
+streams but bear in mind it will go at the rate of the slowest one.</li>
+<li>
+<p><strong><code>info</code></strong> (<code>Object</code>) Metadata for the message, with the following
+properties:</p>
+<ul>
+<li><strong><code>topic</code></strong> (<code>String</code>)  Topic the message was published with.</li>
+<li><strong><code>expires</code></strong> (<code>Integer</code>) When the message expires (number of
+milliseconds after January 1970 00:00:00 UTC).</li>
+<li><strong><code>single</code></strong> (<code>Boolean</code>) Whether this message is being given to at
+most one subscriber (across all <code>QlobberPG</code> instances).</li>
+<li><strong><code>size</code></strong> (<code>Integer</code>) Message size in bytes.</li>
+<li><strong><code>publisher</code></strong> (<code>String</code>) Name of the <code>QlobberPG</code> instance which
+published the message.</li>
+</ul>
+</li>
+<li>
+<p><strong><code>done</code></strong> (<code>Function</code>) Function to call one you've handled the
+message. Note that calling this function is only mandatory if
+<code>info.single === true</code>, in order to delete and unlock the message
+row in the database table. <code>done</code> takes two arguments:</p>
+<ul>
+<li><strong><code>err</code></strong> (<code>Object</code>) If an error occurred then pass details of the
+error, otherwise pass <code>null</code> or <code>undefined</code>.</li>
+<li>
+<p><strong><code>finish</code></strong> (<code>Function</code>) Optional function to call once the message
+has been deleted and unlocked, in the case of
+<code>info.single === true</code>, or straight away otherwise. It will be
+passed the following argument:</p>
+<ul>
+<li><strong><code>err</code></strong> (<code>Object</code>) If an error occurred then details of the
+error, otherwise <code>null</code>.</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+          </div>
+          
+        </div>
+      
+        <div class='space-bottom0'>
+          <div>
+            <span class='code bold'>options</span> <code class='quiet'>(<a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Object">Object</a>?)</code>
+	    Optional settings for this subscription:
+<ul>
+<li><strong><code>subscribe_to_existing</code></strong> (<code>Boolean</code>) If <code>true</code> then <code>handler</code> will
+be called with any existing, unexpired messages that match <code>topic</code>,
+as well as new ones. Defaults to <code>false</code> (only new messages).</li>
+</ul>
+
+          </div>
+          
+        </div>
+      
+        <div class='space-bottom0'>
+          <div>
+            <span class='code bold'>cb</span> <code class='quiet'>(<a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Statements/function">Function</a>?)</code>
+	    Optional function to call once the subscription
+has been registered. This will be passed the following argument:
+<ul>
+<li><strong><code>err</code></strong> (<code>Object</code>) If an error occurred then details of the error,
+otherwise <code>null</code>.</li>
+</ul>
+
           </div>
           
         </div>

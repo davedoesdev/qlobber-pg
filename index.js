@@ -699,7 +699,7 @@ class QlobberPG extends EventEmitter {
     /**
      * Stop checking for new messages.
      *
-     * @param {Function} [cb] Optional function to call once access to the
+     * @param {Function} [cb] - Optional function to call once access to the
      *     database has stopped. Alternatively, you can listen for the
      *     {@link QlobberPG#stop} event.
      */
@@ -904,6 +904,65 @@ class QlobberPG extends EventEmitter {
         return this._extra_matcher;
     }
 
+    /**
+     * Subscribe to messages in the PostgreSQL queue.
+     *
+     * @param {String} topic - Which messages you're interested in receiving.
+     * Message topics are split into words using `.` as the separator. You can
+     * use `*` to match exactly one word in a topic or `#` to match zero or more
+     * words. For example, `foo.*` would match `foo.bar` whereas `foo.#` would
+     * match `foo`, `foo.bar` and `foo.bar.wup`. Note you can change the
+     * separator and wildcard characters by specifying the `separator`,
+     * `wildcard_one` and `wildcard_some` options when
+     * {@link QlobberPG|constructing} `QlobberPG` objects. See the [`qlobber`
+     * documentation](https://github.com/davedoesdev/qlobber#qlobberoptions)
+     * for more information.
+
+     * @param {Function} handler - Function to call when a new message is
+     * received on the PostgreSQL queue and its topic matches against `topic`.
+     * `handler` will be passed the following arguments:
+     * - **`data`** ([`Readable`](http://nodejs.org/api/stream.html#stream_class_stream_readable) | [`Buffer`](http://nodejs.org/api/buffer.html#buffer_class_buffer))
+     *   Message payload as a Readable stream or a Buffer.
+     *   By default you'll receive a Buffer. If `handler` has a property
+     *   `accept_stream` set to a truthy value then you'll receive a stream.
+     *   Note that _all_ subscribers will receive the same stream or content for
+     *   each message. You should take this into account when reading from the
+     *   stream. The stream can be piped into multiple
+     *   [Writable](http://nodejs.org/api/stream.html#stream_class_stream_writable)
+     *   streams but bear in mind it will go at the rate of the slowest one.
+     * - **`info`** (`Object`) Metadata for the message, with the following
+     *   properties:
+     *   - **`topic`** (`String`)  Topic the message was published with.
+     *   - **`expires`** (`Integer`) When the message expires (number of
+     *     milliseconds after January 1970 00:00:00 UTC).
+     *   - **`single`** (`Boolean`) Whether this message is being given to at
+     *     most one subscriber (across all `QlobberPG` instances).
+     *   - **`size`** (`Integer`) Message size in bytes.
+     *   - **`publisher`** (`String`) Name of the `QlobberPG` instance which
+     *     published the message.
+     *  - **`done`** (`Function`) Function to call one you've handled the
+     *    message. Note that calling this function is only mandatory if
+     *    `info.single === true`, in order to delete and unlock the message
+     *    row in the database table. `done` takes two arguments:
+     *    - **`err`** (`Object`) If an error occurred then pass details of the
+     *      error, otherwise pass `null` or `undefined`.
+     *    - **`finish`** (`Function`) Optional function to call once the message
+     *      has been deleted and unlocked, in the case of
+     *      `info.single === true`, or straight away otherwise. It will be
+     *      passed the following argument:
+     *      - **`err`** (`Object`) If an error occurred then details of the
+     *        error, otherwise `null`.
+     *
+     * @param {Object} [options] - Optional settings for this subscription:
+     * - **`subscribe_to_existing`** (`Boolean`) If `true` then `handler` will
+     *   be called with any existing, unexpired messages that match `topic`,
+     *   as well as new ones. Defaults to `false` (only new messages).
+     *
+     * @param {Function} [cb] - Optional function to call once the subscription
+     * has been registered. This will be passed the following argument:
+     * - **`err`** (`Object`) If an error occurred then details of the error,
+     *   otherwise `null`.
+     */
     subscribe(topic, handler, options, cb) {
         if (typeof options === 'function') {
             cb = options;
