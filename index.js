@@ -160,6 +160,14 @@ class QlobberPG extends EventEmitter {
         const emit_error = err => {
             if (err) {
                 this.stopped = true;
+                /**
+                 * Error event. Emitted if an unrecoverable error occurs.
+                 * QlobberPG may stop querying the database for messages.
+                 *
+                 * @event error
+                 * @memberof QlobberPG
+                 * @type {Object}
+                 */
                 this.emit('error', err);
             }
         };
@@ -231,6 +239,13 @@ class QlobberPG extends EventEmitter {
             }
             this._expire();
             this._check();
+            /**
+             * Start event. Emitted when messages can be published and
+             * subscribed to.
+             *
+             * @event start
+             * @memberof QlobberPG
+             */
             this.emit('start');
             cb();
         });
@@ -240,9 +255,11 @@ class QlobberPG extends EventEmitter {
         if (this.stopped && this.active) {
             this.active = false;
             /**
-              * Stop event.
+              * Stop event. Emitted after {@link QlobberPG#stop} has been called
+              * and access to the database has stopped.
               *
-              * @event QlobberPG#stop
+              * @event stop
+              * @memberof QlobberPG
               */
             this.emit('stop');
         }
@@ -251,6 +268,17 @@ class QlobberPG extends EventEmitter {
     }
 
     _warning(err) {
+        /**
+         * Warning event. Emitted if a recoverable error occurs.
+         * QlobberPG will continue to query the database for messages.
+         *
+         * If you don't handle this event, the error will be written to
+         * `console.error`.
+         *
+         * @event warning
+         * @memberof QlobberPG
+         * @type {Object}
+         */
         if (err && !this.emit('warning', err)) {
             console.error(err); // eslint-disable-line no-console
         }
@@ -916,7 +944,7 @@ class QlobberPG extends EventEmitter {
      * `wildcard_one` and `wildcard_some` options when
      * {@link QlobberPG|constructing} `QlobberPG` objects. See the [`qlobber`
      * documentation](https://github.com/davedoesdev/qlobber#qlobberoptions)
-     * for more information.
+     * for more information. Valid characters in `topic` are: `A-Za-z0-9_*#.`
 
      * @param {Function} handler - Function to call when a new message is
      * received on the PostgreSQL queue and its topic matches against `topic`.
@@ -953,10 +981,11 @@ class QlobberPG extends EventEmitter {
      *      - **`err`** (`Object`) If an error occurred then details of the
      *        error, otherwise `null`.
      *
-     * @param {Object} [options] - Optional settings for this subscription:
-     * - **`subscribe_to_existing`** (`Boolean`) If `true` then `handler` will
-     *   be called with any existing, unexpired messages that match `topic`,
-     *   as well as new ones. Defaults to `false` (only new messages).
+     * @param {Object} [options] - Optional settings for this subscription.
+     * @param {Boolean} [options.subscribe_to_existing=false] - If `true` then
+     * `handler` will be called with any existing, unexpired messages that
+     * match `topic`, as well as new ones. If `false` (the default) then
+     * `handler` will be called with new messages only.
      *
      * @param {Function} [cb] - Optional function to call once the subscription
      * has been registered. This will be passed the following argument:
@@ -1056,6 +1085,43 @@ class QlobberPG extends EventEmitter {
         this._update_trigger(cb2);
     }
 
+    /**
+     * Publish a message to the PostgreSQL queue.
+     *
+     * @param {String} topic - Message topic. The topic should be a series of
+     *     words separated by `.` (or the `separator` character you passed to
+     *     the {@link QlobberPG|constructor}). Valid characters in `topic` are:
+     *     `A-Za-z0-9_.`
+     *
+     * @param {String|Buffer} payload - Message payload. If you don't pass a
+     *     payload then `publish` will return a [`Writable`](http://nodejs.org/api/stream.html#stream_class_stream_writable)
+     *     for you to write the payload info.
+     *
+     * @param {Object} options - Optional settings for this publication.
+     * @param {Boolean} [options.single=false] - If `true` then the message
+     *     will be given to _at most_ one interested subscriber, across all
+     *     `QlobberPG` instances querying the PostgreSQL queue. Otherwise all
+     *     interested subscribers will receive the message (the default).
+     * @param {Integer} [options.ttl] - Time-to-live (in milliseconds) for this
+     *     message. If you don't specify anything then `single_ttl` or
+     *     `multi_ttl` (provided to the {@link QlobberPG|constructor}) will be
+     *     used, depending on the value of `single`. After the time-to-live
+     *     for the message has passed, the message is ignored and deleted when
+     *     convenient.
+     * @param {String} [options.encoding="utf8"] - If `payload` is a string,
+     *     the encoding to use when writing to the database.
+     *
+     * @param {Function} [cb] - Optional function to call once the message has
+     *     been written to the database. It will be passed the following
+     *     arguments:
+     * - **`err`** (`Object`) If an error occurred then details of the error,
+     *   otherwise `null`.
+     * - **`info`** (`Object`) Metadata for the message. See
+     *   {@link QlobberPG#subscribe} for a description of `info`'s properties.
+     *
+     * @return {Stream|undefined} - A [`Writable`](http://nodejs.org/api/stream.html#stream_class_stream_writable)
+     *     if no `payload` was passed, otherwise `undefined`.
+     */
     publish(topic, payload, options, cb) {
         if ((typeof payload !== 'string') &&
             !Buffer.isBuffer(payload) &&
@@ -1120,7 +1186,7 @@ class QlobberPG extends EventEmitter {
         }
 
         if (typeof payload === 'string') {
-            return insert(Buffer.from(payload));
+            return insert(Buffer.from(payload, options.encoding || 'utf8'));
         }
 
         const s = new CollectStream();

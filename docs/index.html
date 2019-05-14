@@ -74,21 +74,46 @@
                         #unsubscribe
                       </a></li>
                       
+                      <li><a
+                        href='#qlobberpgpublish'
+                        class='regular pre-open'>
+                        #publish
+                      </a></li>
+                      
                     </ul>
                   
                   
                   
-                </div>
-                
-                </li>
-              
-                
-                <li><a
-                  href='#eventqlobberpgstop'
-                  class="">
-                  QlobberPG#stop
+                    <ul class='list-reset py1-ul pl1'>
+                      <li class='h5'>Events</li>
+                      
+                        <li><a
+                          href='#qlobberpgeventerror'
+                          class='regular pre-open'>
+                          ⓔ error
+                        </a></li>
+                      
+                        <li><a
+                          href='#qlobberpgeventstart'
+                          class='regular pre-open'>
+                          ⓔ start
+                        </a></li>
+                      
+                        <li><a
+                          href='#qlobberpgeventstop'
+                          class='regular pre-open'>
+                          ⓔ stop
+                        </a></li>
+                      
+                        <li><a
+                          href='#qlobberpgeventwarning'
+                          class='regular pre-open'>
+                          ⓔ warning
+                        </a></li>
+                      
+                    </ul>
                   
-                </a>
+                </div>
                 
                 </li>
               
@@ -718,7 +743,10 @@ separator and wildcard characters by specifying the
 <a href="https://github.com/davedoesdev/qlobber#qlobberoptions"><code>qlobber</code>
 documentation</a>
 
-for more information.
+for more information. Valid characters in 
+<code>topic</code>
+ are: 
+<code>A-Za-z0-9_*#.</code>
 
           </div>
           
@@ -787,14 +815,49 @@ error, otherwise <code>null</code>.</li>
         <div class='space-bottom0'>
           <div>
             <span class='code bold'>options</span> <code class='quiet'>(<a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Object">Object</a>?)</code>
-	    Optional settings for this subscription:
-<ul>
-<li><strong><code>subscribe_to_existing</code></strong> (<code>Boolean</code>) If <code>true</code> then <code>handler</code> will
-be called with any existing, unexpired messages that match <code>topic</code>,
-as well as new ones. Defaults to <code>false</code> (only new messages).</li>
-</ul>
+	    Optional settings for this subscription.
 
           </div>
+          
+          <table class='mt1 mb2 fixed-table h5 col-12'>
+            <colgroup>
+              <col width='30%' />
+              <col width='70%' />
+            </colgroup>
+            <thead>
+              <tr class='bold fill-light'>
+                <th>Name</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody class='mt1'>
+              
+                <tr>
+  <td class='break-word'><span class='code bold'>options.subscribe_to_existing</span> <code class='quiet'><a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Boolean">Boolean</a></code>
+  
+    (default <code>false</code>)
+  </td>
+  <td class='break-word'><span>If 
+<code>true</code>
+ then
+
+<code>handler</code>
+ will be called with any existing, unexpired messages that
+match 
+<code>topic</code>
+, as well as new ones. If 
+<code>false</code>
+ (the default) then
+
+<code>handler</code>
+ will be called with new messages only.
+</span></td>
+</tr>
+
+
+              
+            </tbody>
+          </table>
           
         </div>
       
@@ -952,7 +1015,196 @@ otherwise <code>null</code>.</li>
       </div>
     </div>
   
-</div>
+    <div class='border-bottom' id='qlobberpgpublish'>
+      <div class="clearfix small pointer toggle-sibling">
+        <div class="py1 contain">
+            <a class='icon pin-right py1 dark-link caret-right'>▸</a>
+            <span class='code strong strong truncate'>publish(topic, payload, options, cb?)</span>
+        </div>
+      </div>
+      <div class="clearfix display-none toggle-target">
+        <section class='p2 mb2 clearfix bg-white minishadow'>
+
+  
+
+  <p>Publish a message to the PostgreSQL queue.</p>
+
+    <div class='pre p1 fill-light mt0'>publish(topic: <a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/String">String</a>, payload: (<a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/String">String</a> | <a href="https://nodejs.org/api/buffer.html">Buffer</a>), options: <a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Object">Object</a>, cb: <a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Statements/function">Function</a>?): (<a href="https://nodejs.org/api/stream.html">Stream</a> | <a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/undefined">undefined</a>)</div>
+  
+  
+
+  
+  
+  
+  
+  
+  
+
+  
+    <div class='py1 quiet mt1 prose-big'>Parameters</div>
+    <div class='prose'>
+      
+        <div class='space-bottom0'>
+          <div>
+            <span class='code bold'>topic</span> <code class='quiet'>(<a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/String">String</a>)</code>
+	    Message topic. The topic should be a series of
+words separated by 
+<code>.</code>
+ (or the 
+<code>separator</code>
+ character you passed to
+the 
+<a href="#qlobberpg">constructor</a>
+). Valid characters in 
+<code>topic</code>
+ are:
+
+<code>A-Za-z0-9_.</code>
+
+          </div>
+          
+        </div>
+      
+        <div class='space-bottom0'>
+          <div>
+            <span class='code bold'>payload</span> <code class='quiet'>((<a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/String">String</a> | <a href="https://nodejs.org/api/buffer.html">Buffer</a>))</code>
+	    Message payload. If you don't pass a
+payload then 
+<code>publish</code>
+ will return a 
+<a href="http://nodejs.org/api/stream.html#stream_class_stream_writable"><code>Writable</code></a>
+
+for you to write the payload info.
+
+          </div>
+          
+        </div>
+      
+        <div class='space-bottom0'>
+          <div>
+            <span class='code bold'>options</span> <code class='quiet'>(<a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Object">Object</a>)</code>
+	    Optional settings for this publication.
+
+          </div>
+          
+          <table class='mt1 mb2 fixed-table h5 col-12'>
+            <colgroup>
+              <col width='30%' />
+              <col width='70%' />
+            </colgroup>
+            <thead>
+              <tr class='bold fill-light'>
+                <th>Name</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody class='mt1'>
+              
+                <tr>
+  <td class='break-word'><span class='code bold'>options.single</span> <code class='quiet'><a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Boolean">Boolean</a></code>
+  
+    (default <code>false</code>)
+  </td>
+  <td class='break-word'><span>If 
+<code>true</code>
+ then the message
+will be given to 
+<em>at most</em>
+ one interested subscriber, across all
+
+<code>QlobberPG</code>
+ instances querying the PostgreSQL queue. Otherwise all
+interested subscribers will receive the message (the default).
+</span></td>
+</tr>
+
+
+              
+                <tr>
+  <td class='break-word'><span class='code bold'>options.ttl</span> <code class='quiet'>Integer?</code>
+  </td>
+  <td class='break-word'><span>Time-to-live (in milliseconds) for this
+message. If you don't specify anything then 
+<code>single_ttl</code>
+ or
+
+<code>multi_ttl</code>
+ (provided to the 
+<a href="#qlobberpg">constructor</a>
+) will be
+used, depending on the value of 
+<code>single</code>
+. After the time-to-live
+for the message has passed, the message is ignored and deleted when
+convenient.
+</span></td>
+</tr>
+
+
+              
+                <tr>
+  <td class='break-word'><span class='code bold'>options.encoding</span> <code class='quiet'><a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/String">String</a></code>
+  
+    (default <code>&quot;utf8&quot;</code>)
+  </td>
+  <td class='break-word'><span>If 
+<code>payload</code>
+ is a string,
+the encoding to use when writing to the database.
+</span></td>
+</tr>
+
+
+              
+            </tbody>
+          </table>
+          
+        </div>
+      
+        <div class='space-bottom0'>
+          <div>
+            <span class='code bold'>cb</span> <code class='quiet'>(<a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Statements/function">Function</a>?)</code>
+	    Optional function to call once the message has
+been written to the database. It will be passed the following
+arguments:
+<ul>
+<li><strong><code>err</code></strong> (<code>Object</code>) If an error occurred then details of the error,
+otherwise <code>null</code>.</li>
+<li><strong><code>info</code></strong> (<code>Object</code>) Metadata for the message. See
+<a href="#qlobberpgsubscribe">QlobberPG#subscribe</a> for a description of <code>info</code>'s properties.</li>
+</ul>
+
+          </div>
+          
+        </div>
+      
+    </div>
+  
+
+  
+
+  
+    
+      <div class='py1 quiet mt1 prose-big'>Returns</div>
+      <code>(<a href="https://nodejs.org/api/stream.html">Stream</a> | <a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/undefined">undefined</a>)</code>:
+        A 
+<a href="http://nodejs.org/api/stream.html#stream_class_stream_writable"><code>Writable</code></a>
+
+if no 
+<code>payload</code>
+ was passed, otherwise 
+<code>undefined</code>
+.
+
+      
+    
+  
+
+  
+
+  
+
+  
 
   
 
@@ -961,40 +1213,57 @@ otherwise <code>null</code>.</li>
   
 </section>
 
-          
-        
-          
-          <section class='p2 mb2 clearfix bg-white minishadow'>
-
+      </div>
+    </div>
   
-  <div class='clearfix'>
-    
-    <h3 class='fl m0' id='eventqlobberpgstop'>
-      QlobberPG#stop
-    </h3>
-    
-    
-  </div>
-  
-
-  <p>Stop event.</p>
-
-    <div class='pre p1 fill-light mt0'>QlobberPG#stop</div>
-  
-  
-
-  
-  
-  
-  
-  
-  
+</div>
 
   
 
   
 
   
+    <div class='py1 quiet mt1 prose-big'>Events</div>
+    <div class="clearfix">
+  
+    <div class='border-bottom' id='qlobberpgeventerror'>
+      <div class="clearfix small pointer toggle-sibling">
+        <div class="py1 contain">
+            <a class='icon pin-right py1 dark-link caret-right'>▸</a>
+            <span class='code strong strong truncate'>error</span>
+        </div>
+      </div>
+      <div class="clearfix display-none toggle-target">
+        <section class='p2 mb2 clearfix bg-white minishadow'>
+
+  
+
+  <p>Error event. Emitted if an unrecoverable error occurs.
+QlobberPG may stop querying the database for messages.</p>
+
+    <div class='pre p1 fill-light mt0'>error</div>
+  
+    <p>
+      Type:
+      <a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Object">Object</a>
+    </p>
+  
+  
+
+  
+  
+  
+  
+  
+  
+
+  
+
+  
+
+  
+
+  
 
   
 
@@ -1005,6 +1274,163 @@ otherwise <code>null</code>.</li>
   
 
   
+</section>
+
+      </div>
+    </div>
+  
+    <div class='border-bottom' id='qlobberpgeventstart'>
+      <div class="clearfix small pointer toggle-sibling">
+        <div class="py1 contain">
+            <a class='icon pin-right py1 dark-link caret-right'>▸</a>
+            <span class='code strong strong truncate'>start</span>
+        </div>
+      </div>
+      <div class="clearfix display-none toggle-target">
+        <section class='p2 mb2 clearfix bg-white minishadow'>
+
+  
+
+  <p>Start event. Emitted when messages can be published and
+subscribed to.</p>
+
+    <div class='pre p1 fill-light mt0'>start</div>
+  
+  
+
+  
+  
+  
+  
+  
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+</section>
+
+      </div>
+    </div>
+  
+    <div class='border-bottom' id='qlobberpgeventstop'>
+      <div class="clearfix small pointer toggle-sibling">
+        <div class="py1 contain">
+            <a class='icon pin-right py1 dark-link caret-right'>▸</a>
+            <span class='code strong strong truncate'>stop</span>
+        </div>
+      </div>
+      <div class="clearfix display-none toggle-target">
+        <section class='p2 mb2 clearfix bg-white minishadow'>
+
+  
+
+  <p>Stop event. Emitted after <a href="#qlobberpgstop">QlobberPG#stop</a> has been called
+and access to the database has stopped.</p>
+
+    <div class='pre p1 fill-light mt0'>stop</div>
+  
+  
+
+  
+  
+  
+  
+  
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+</section>
+
+      </div>
+    </div>
+  
+    <div class='border-bottom' id='qlobberpgeventwarning'>
+      <div class="clearfix small pointer toggle-sibling">
+        <div class="py1 contain">
+            <a class='icon pin-right py1 dark-link caret-right'>▸</a>
+            <span class='code strong strong truncate'>warning</span>
+        </div>
+      </div>
+      <div class="clearfix display-none toggle-target">
+        <section class='p2 mb2 clearfix bg-white minishadow'>
+
+  
+
+  <p>Warning event. Emitted if a recoverable error occurs.
+QlobberPG will continue to query the database for messages.</p>
+<p>If you don't handle this event, the error will be written to
+<code>console.error</code>.</p>
+
+    <div class='pre p1 fill-light mt0'>warning</div>
+  
+    <p>
+      Type:
+      <a href="https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Object">Object</a>
+    </p>
+  
+  
+
+  
+  
+  
+  
+  
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+</section>
+
+      </div>
+    </div>
+  
+</div>
 
   
 </section>
