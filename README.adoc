@@ -223,8 +223,3 @@ http://gotwarlost.github.io/istanbul/[Istanbul] results are available
 http://rawgit.davedoesdev.com/davedoesdev/qlobber-pg/master/coverage/lcov-report/index.html[here].
 
 Coveralls page is https://coveralls.io/r/davedoesdev/qlobber-pg[here].
-
-
-TODO:
-Benchmarks
-API

@@ -25,7 +25,9 @@
     "ci-coverage": "npm run coverage && cat coverage/lcov.info | coveralls",
     "test-multi": "mocha --bail test/rabbitmq.js --multi",
     "test-remote": "mocha --bail test/rabbitmq.js --remote",
-    "docs": "documentation build index.js -f html -o docs"
+    "docs": "documentation build index.js -f html -o docs",
+    "_bench": "bench -c 1 -i bench/implementations/qlobber-pg.js --data",
+    "bench": "node -e 'child_process.spawnSync(\"npm\", [\"run\", \"_bench\", \"--\", Buffer.from(JSON.stringify(process.argv.slice(1))).toString(\"hex\")], { stdio: \"inherit\" })' --"
   },
   "directories": {
     "test": "test"
@@ -50,6 +52,7 @@
     "qlobber": "^3.1.0"
   },
   "devDependencies": {
+    "b": "git://github.com/davedoesdev/b.git",
     "chai": "^4.2.0",
     "coveralls": "^3.0.3",
     "cp-remote": "^0.2.0",
