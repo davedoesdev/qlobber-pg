@@ -7,7 +7,6 @@ const cp_remote = require('cp-remote');
 const async = require('async');
 const config = require('config');
 const yargs = require('yargs');
-console.log(JSON.parse(Buffer.from(yargs.argv.data, 'hex')));
 const argv = yargs(JSON.parse(Buffer.from(yargs.argv.data, 'hex')))
     .demand('rounds')
     .demand('size')
