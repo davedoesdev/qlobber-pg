@@ -1,3 +1,4 @@
+'use strict';
 exports.up = pgm => {
     pgm.createExtension('ltree', {
         ifNotExists: true

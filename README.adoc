@@ -223,3 +223,23 @@ http://gotwarlost.github.io/istanbul/[Istanbul] results are available
 http://rawgit.davedoesdev.com/davedoesdev/qlobber-pg/master/coverage/lcov-report/index.html[here].
 
 Coveralls page is https://coveralls.io/r/davedoesdev/qlobber-pg[here].
+
+== Benchmarking
+
+To run the benchmark:
+
+[source,shell]
+----
+npm run bench -- --rounds=<number of rounds> \
+                 --size=<message size> \
+                 --ttl=<message time-to-live in seconds> \
+                 (--queues=<number of queues> | \
+                  --remote=<host1> --remote=<host2> ...)
+----
+
+If you provide at least one `--remote=<host>` argument then the benchmark will
+be distributed across multiple hosts using
+https://github.com/davedoesdev/cp-remote[cp-remote]. Make sure on each host:
+
+* The `qlobber-pq` module is installed at the same location.
+* The same PostgreSQL server is accessible.

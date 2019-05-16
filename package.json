@@ -1,7 +1,7 @@
 {
   "name": "qlobber-pg",
   "description": "PostgreSQL-based pub-sub and workqueues. Supports AMQP-like wildcard topics.",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "homepage": "https://github.com/davedoesdev/qlobber-pg",
   "author": {
     "name": "David Halls",
@@ -19,7 +19,7 @@
   "main": "index.js",
   "scripts": {
     "migrate": "node-pg-migrate",
-    "lint": "eslint *.js migrations/*.js && eslint -c .eslintrc.test.json test/*.js test/fixtures/*.js",
+    "lint": "eslint *.js migrations/*.js bench/*.js bench/*/*.js bench/*/*/*.js && eslint -c .eslintrc.test.json test/*.js test/fixtures/*.js",
     "test": "mocha --bail",
     "coverage": "nyc npm test && nyc report -r lcov && nyc check-coverage --statements 90 --branches 90 --functions 90 --lines 90",
     "ci-coverage": "npm run coverage && cat coverage/lcov.info | coveralls",

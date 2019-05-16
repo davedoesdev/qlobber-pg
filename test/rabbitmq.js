@@ -1,3 +1,4 @@
+'use strict';
 const { EventEmitter } = require('events');
 const { randomBytes } = require('crypto');
 const { fork } = require('child_process');

@@ -1,3 +1,4 @@
+'use strict';
 const { Writable, PassThrough, pipeline } = require('stream');
 const { EventEmitter } = require('events');
 const { Client, types } = require('pg');

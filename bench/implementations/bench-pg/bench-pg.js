@@ -1,3 +1,4 @@
+'use strict';
 const async = require('async');
 const crypto = require('crypto');
 const rabbitmq_bindings = require('../../../test/fixtures/rabbitmq_bindings.js');
@@ -45,10 +46,11 @@ process.on('message', () => {
     async.timesSeries(options.rounds, (r, cb) => {
         async.times(rabbitmq_bindings.expected_results_before_remove.length, (i, cb) => {
             if (i % options.queues === options.n) {
-                qpg.publish(rabbitmq_bindings.expected_results_before_remove[i][0],
-                            payload,
-                            { ttl: options.ttl },
-                            cb);
+                qpg.publish(
+                    rabbitmq_bindings.expected_results_before_remove[i][0],
+                    payload,
+                    { ttl: options.ttl },
+                    cb);
             } else {
                 cb();
             }

@@ -1,3 +1,4 @@
+'use strict';
 const options = JSON.parse(Buffer.from(process.argv[2], 'hex'));
 const { queue } = require('async');
 const { QlobberPG } = require('../..');

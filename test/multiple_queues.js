@@ -1,3 +1,4 @@
+'use strict';
 const { randomBytes } = require('crypto');
 const { timesSeries, each, timesLimit } = require('async');
 const { QlobberPG } = require('..');

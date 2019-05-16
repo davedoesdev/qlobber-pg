@@ -31,6 +31,10 @@
                 "varsIgnorePattern": "^unused_",
                 "argsIgnorePattern": "^unused_"
             }
+        ],
+        "strict": [
+            "error",
+            "global"
         ]
     }
 }

@@ -1,3 +1,4 @@
+'use strict';
 const { Client } = require('pg');
 const { expect } = require('chai');
 const config = require('config');

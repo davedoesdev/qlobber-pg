@@ -1,4 +1,5 @@
 /* eslint-disable indent */
+'use strict';
 
 exports.test_bindings = [
     ["a.b.c",         "t1"],

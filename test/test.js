@@ -1,3 +1,4 @@
+'use strict';
 const path = require('path');
 const { Writable } = require('stream');
 const { randomBytes, createHash } = require('crypto');
@@ -1031,7 +1032,7 @@ describe('qlobber-pq', function () {
         qpg._update_trigger = function (cb) {
             update_trigger_cb = cb;
         };
-        qpg.subscribe('foo', function (data, info, cb) {
+        qpg.subscribe('foo', function () {
             orig_update_trigger.call(this, update_trigger_cb);
             this.stop();
         }, err => {
@@ -1049,7 +1050,7 @@ describe('qlobber-pq', function () {
         qpg._update_trigger = function (cb) {
             update_trigger_cb = cb;
         };
-        qpg.subscribe('foo', function (data, info, cb) {
+        qpg.subscribe('foo', function () {
             const orig_query = qpg._client.query;
             qpg._client.query = function (...args) {
                 const r = orig_query.apply(this, args);
@@ -1117,7 +1118,7 @@ describe('qlobber-pq', function () {
         qpg._update_trigger = function (cb) {
             update_trigger_cb = cb;
         };
-        qpg.subscribe('foo', function (data, info, cb) {
+        qpg.subscribe('foo', function () {
             orig_update_trigger.call(this, update_trigger_cb);
             done();
         }, iferr(done, () => {}));
@@ -1132,7 +1133,7 @@ describe('qlobber-pq', function () {
         qpg._update_trigger = function (cb) {
             update_trigger_cb = cb;
         };
-        qpg.subscribe('foo', function (data, info, cb) {
+        qpg.subscribe('foo', function () {
             const orig_query = qpg._client.query;
             qpg._client.query = function (...args) {
                 qpg._client.query = orig_query;

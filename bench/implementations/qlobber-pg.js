@@ -1,3 +1,5 @@
+/* global before */
+'use strict';
 const child_process = require('child_process');
 const path = require('path');
 const os = require('os');
@@ -5,12 +7,13 @@ const cp_remote = require('cp-remote');
 const async = require('async');
 const config = require('config');
 const yargs = require('yargs');
+console.log(JSON.parse(Buffer.from(yargs.argv.data, 'hex')));
 const argv = yargs(JSON.parse(Buffer.from(yargs.argv.data, 'hex')))
     .demand('rounds')
     .demand('size')
     .demand('ttl')
     .check(argv => {
-        if (!argv.queues || argv.remote) {
+        if (!(argv.queues || argv.remote)) {
             throw new Error('missing --queues or --remote');
         }
         if (argv.queues && argv.remote) {
@@ -33,6 +36,8 @@ if (argv.remote) {
 
 // b doesn't pass down env and node-postgres defaults user to $USERNAME
 config.db.user = os.userInfo().username;
+
+let queues;
 
 before((times, done) => {
     async.times(argv.queues, (n, cb) => {
@@ -67,7 +72,7 @@ exports.publish = function (done) {
     async.each(queues, (q, cb) => {
         q.removeListener('exit', error);
         q.on('exit', (code, signal) => {
-            cb(code || signal)
+            cb(code || signal);
         });
         q.send({ type: 'start' });
     }, done);
