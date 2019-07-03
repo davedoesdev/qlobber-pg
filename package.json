@@ -1,7 +1,7 @@
 {
   "name": "qlobber-pg",
   "description": "PostgreSQL-based pub-sub and workqueues. Supports AMQP-like wildcard topics.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "homepage": "https://github.com/davedoesdev/qlobber-pg",
   "author": {
     "name": "David Halls",

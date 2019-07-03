@@ -157,6 +157,7 @@ class QlobberPG extends EventEmitter {
 
         this.stopped = false;
         this.active = true;
+        this.initialized = false;
 
         const emit_error = err => {
             if (err) {
@@ -247,6 +248,7 @@ class QlobberPG extends EventEmitter {
              * @event start
              * @memberof QlobberPG
              */
+            this.initialized = true;
             this.emit('start');
             cb();
         });
