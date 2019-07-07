@@ -216,17 +216,7 @@ class QlobberPG extends EventEmitter {
             }
         }), close_and_emit_error);
 
-        this._queue.push(cb => {
-            if (this._chkstop()) {
-                return;
-            }
-            this._client.query('SELECT DISTINCT ON (publisher) publisher, id FROM messages ORDER BY publisher, id DESC', cb);
-        }, iferr(close_and_emit_error, r => {
-            this._last_ids = new Map();
-            for (let row of r.rows) {
-                this._last_ids.set(row.publisher, row.id);
-            }
-        }));
+        this._reset_last_ids(close_and_emit_error);
 
         this._queue.push(cb => {
             if (this._chkstop()) {
@@ -252,6 +242,21 @@ class QlobberPG extends EventEmitter {
             this.emit('start');
             cb();
         });
+    }
+
+    _reset_last_ids(cb) {
+        this._queue.push(cb => {
+            if (this._chkstop()) {
+                return;
+            }
+            this._client.query('SELECT DISTINCT ON (publisher) publisher, id FROM messages ORDER BY publisher, id DESC', cb);
+        }, iferr(cb, r => {
+            this._last_ids = new Map();
+            for (let row of r.rows) {
+                this._last_ids.set(row.publisher, row.id);
+            }
+            cb();
+        }));
     }
 
     _chkstop() {
