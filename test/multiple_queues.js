@@ -39,6 +39,8 @@ describe('multiple queues', function () {
             let the_qpgs;
             let checksum = 0;
             let expected_checksum = 0;
+            let length = 0;
+            let expected_length = 0;
 
             timesSeries(num_queues, (n, cb) => {
                 const qpg = new QlobberPG(Object.assign({
@@ -56,6 +58,7 @@ describe('multiple queues', function () {
                         }
                         
                         checksum += sum(data);
+                        length += data.length;
 
                         ++qcount;
 
@@ -76,6 +79,8 @@ describe('multiple queues', function () {
                             (count_multi === num_multi * num_queues)) {
                             process.nextTick(() => {
                                 each(the_qpgs, (qpg, cb) => qpg.stop(cb), iferr(done, () => {
+                                    expect(length).to.be.above(0);
+                                    expect(length).to.equal(expected_length);
                                     expect(checksum).to.be.above(0);
                                     expect(checksum).to.equal(expected_checksum);
                                     done();
@@ -113,9 +118,11 @@ describe('multiple queues', function () {
                     if (single) {
                         ++num_single;
                         expected_checksum += check;
+                        expected_length += data.length;
                     } else {
                         ++num_multi;
                         expected_checksum += check * num_queues;
+                        expected_length += data.length * num_queues;
                     }
 
                     const q = Math.floor(Math.random() * num_queues);
@@ -132,6 +139,8 @@ describe('multiple queues', function () {
                     if ((count_single === num_single) &&
                         (count_multi === num_multi * num_queues)) {
                         each(qpgs, (qpg, cb) => qpg.stop(cb), iferr(done, () => {
+                            expect(length).to.be.above(0);
+                            expect(length).to.equal(expected_length);
                             expect(checksum).to.be.above(0);
                             expect(checksum).to.equal(expected_checksum);
                             done();
