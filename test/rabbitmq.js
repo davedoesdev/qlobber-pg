@@ -87,7 +87,7 @@ function rabbitmq_tests(name, QCons, num_queues, rounds, msglen, retry_prob, exp
                     expect(single_sum).to.equal(expected_single_sum);
 
                     for (let t in result) {
-                        if (result.hasOwnProperty(t)) {
+                        if (Object.prototype.hasOwnProperty.call(result, t)) {
                             result[t].sort(topic_sort);
                         }
                     }

@@ -4,13 +4,13 @@ environment:
   PGPASSWORD: Password12!
   POSTGRES_PATH: C:\Program Files\PostgreSQL\10
   matrix:
-    - nodejs_version: "12.2.0"
+    - nodejs_version: "13.3.0"
       TARGET: test
-    - nodejs_version: "12.2.0"
+    - nodejs_version: "13.3.0"
       TARGET: test-multi
-    - nodejs_version: "10.15.3"
+    - nodejs_version: "12.13.1"
       TARGET: test
-    - nodejs_version: "10.15.3"
+    - nodejs_version: "12.13.1"
       TARGET: test-multi
 
 services:
