@@ -9,6 +9,7 @@ addons:
   apt:
     packages:
       - socat
+  postgresql: 12
 env:
   matrix:
     - TARGET=test
