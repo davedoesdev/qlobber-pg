@@ -1,24 +1,23 @@
-dist: xenial
+dist: bionic
 language: node_js
 node_js:
   - 12
   - 13
-services:
-  - postgresql
-addons:
-  postgresql: 12
-  apt:
-    packages:
-      - socat
-      - postgresql-12
-      - postgresql-client-12
 env:
+  global:
+    - PGUSER=postgres
+    - PGPORT=5432
   matrix:
     - TARGET=test
     - TARGET=test-multi
     - TARGET=test-remote
     - TARGET=ci-coverage
 before_install:
+  - sudo apt-get update
+  - sudo apt-get --yes remove postgresql\*
+  - sudo apt-get install -y postgresql-12 postgresql-client-12 socat
+  - sudo cp /etc/postgresql/{9.6,12}/main/pg_hba.conf
+  - sudo service postgresql restart 12
   - ssh-keygen -t rsa -f ~/.ssh/id_rsa -N ''
   - cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
   - ssh-keyscan -t rsa localhost >> ~/.ssh/known_hosts
@@ -31,7 +30,8 @@ before_install:
   - ssh localhost node --version
   - sudo mount -o remount,size=50% /var/ramfs
 before_script:
-  - psql -c 'create database "qlobber-pg";'
+  - psql -c 'select version();' -U postgres
+  - psql -c 'create database "qlobber-pg";' -U postgres
   - npm run migrate up
 script:
   - npm run $TARGET
