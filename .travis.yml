@@ -13,6 +13,8 @@ addons:
       - postgresql-12
       - postgresql-client-12
 env:
+  global:
+    - PGPORT=5432
   matrix:
     - TARGET=test
     - TARGET=test-multi
