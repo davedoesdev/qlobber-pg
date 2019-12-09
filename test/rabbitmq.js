@@ -188,13 +188,13 @@ function rabbitmq_tests(name, QCons, num_queues, rounds, msglen, retry_prob, exp
                 }
 
                 if (Object.keys(subs).length === 0) {
-                    pq.drain = () => {
+                    pq.drain(() => {
                         setTimeout(() => {
                             expect(count).to.equal(0);
                             expect(count_single).to.equal(0);
                             each(qpgs, (qpg, next) => qpg.stop(next), done);
                         }, 10 * 1000);
-                    };
+                    });
                 }
             }
             
@@ -217,13 +217,13 @@ function rabbitmq_tests(name, QCons, num_queues, rounds, msglen, retry_prob, exp
                 q.push(i, iferr(done, () => {}));
             }
 
-            q.drain = () => {
+            q.drain(() => {
                 if (f) {
                     f(qpgs, subs, assigned, unsubscribe, iferr(done, publish));
                 } else {
                     publish();
                 }
-            };
+            });
         }));
     });
 }
