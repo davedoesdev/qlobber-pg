@@ -4,9 +4,6 @@ node_js:
   - 12
   - 13
 env:
-  global:
-    - PGUSER=postgres
-    - PGPORT=5432
   matrix:
     - TARGET=test
     - TARGET=test-multi
@@ -30,8 +27,10 @@ before_install:
   - ssh localhost node --version
   - sudo mount -o remount,size=50% /var/ramfs
 before_script:
-  - psql -c 'select version();' -U postgres
-  - psql -c 'create database "qlobber-pg";' -U postgres
+  - psql --version
+  - psql -c 'create role travis superuser login createdb;' -U postgres
+  - psql -c 'select version();'
+  - psql -c 'create database "qlobber-pg";'
   - npm run migrate up
 script:
   - npm run $TARGET
