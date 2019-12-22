@@ -693,6 +693,8 @@ class QlobberPG extends EventEmitter {
     }
 
     _message(payload, deferred, extra_matcher, cb) {
+        payload.topic = payload.topic.split('.').join(this._matcher._separator);
+
         if (payload.expires <= Date.now()) {
             return cb();
         }
@@ -784,21 +786,21 @@ class QlobberPG extends EventEmitter {
     }
 
     _ltreeify(topic) {
-        const t = topic.split('.');
+        const t = topic.split(this._matcher._separator);
         const r = [];
         let asterisks = 0;
         for (let i = 0; i < t.length; ++i) {
             const l = t[i];
             switch (l) {
-            case '*':
+            case this._matcher._wildcard_one:
                 ++asterisks;
-                if (t[i+1] !== '*') {
+                if (t[i+1] !== this._matcher._wildcard_one) {
                     r.push(`*{${asterisks}}`);
                     asterisks = 0;
                 }
                 break;
-            case '#':
-                if (t[i+1] !== '#') {
+            case this._matcher._wildcard_some:
+                if (t[i+1] !== this._matcher._wildcard_some) {
                     r.push('*');
                 }
                 break;
@@ -891,9 +893,9 @@ class QlobberPG extends EventEmitter {
         if (topic === '') {
             return true;
         }
-        for (let label of topic.split('.')) {
-            if ((label !== '*') &&
-                (label !== '#') &&
+        for (let label of topic.split(this._matcher._separator)) {
+            if ((label !== this._matcher._wildcard_one) &&
+                (label !== this._matcher._wildcard_some) &&
                 !/^[A-Za-z0-9_]+$/.test(label)) {
                 cb(new Error(`invalid subscription topic: ${topic}`));
                 return false;
@@ -909,7 +911,7 @@ class QlobberPG extends EventEmitter {
         if (topic === '') {
             return true;
         }
-        for (let label of topic.split('.')) {
+        for (let label of topic.split(this._matcher._separator)) {
             if (!/^[A-Za-z0-9_]+$/.test(label)) {
                 cb(new Error(`invalid publication topic: ${topic}`));
                 return false;
@@ -1171,7 +1173,7 @@ class QlobberPG extends EventEmitter {
                     return cb(new Error('stopped'));
                 }
                 this._client.query("INSERT INTO messages(topic, expires, single, data, publisher) VALUES($1, $2, $3, decode($4::text, 'hex'), $5)", [
-                    topic,
+                    topic.split(this._matcher._separator).join('.'),
                     new Date(expires),
                     single,
                     data.toString('hex'),
