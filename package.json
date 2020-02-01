@@ -1,7 +1,7 @@
 {
   "name": "qlobber-pg",
   "description": "PostgreSQL-based pub-sub and workqueues. Supports AMQP-like wildcard topics.",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "homepage": "https://github.com/davedoesdev/qlobber-pg",
   "author": {
     "name": "David Halls",
@@ -43,25 +43,25 @@
     "node": ">= 12"
   },
   "dependencies": {
-    "async": "^3.1.0",
+    "async": "^3.1.1",
     "iferr": "^1.0.2",
-    "node-pg-migrate": "^4.2.0",
-    "pg": "^7.15.1",
+    "node-pg-migrate": "^4.2.2",
+    "pg": "^7.17.1",
     "pg-escape": "^0.2.0",
-    "pg-query-stream": "^2.0.1",
-    "qlobber": "^4.0.1"
+    "pg-query-stream": "^3.0.0",
+    "qlobber": "^4.2.0"
   },
   "devDependencies": {
     "b": "git://github.com/davedoesdev/b.git",
     "chai": "^4.2.0",
-    "config": "^3.2.4",
+    "config": "^3.2.5",
     "coveralls": "^3.0.9",
-    "cp-remote": "^0.2.0",
+    "cp-remote": "^0.2.1",
     "documentation": "^12.1.4",
     "eslint": "^6.8.0",
-    "mocha": "^6.2.2",
-    "nyc": "^14.1.1",
+    "mocha": "^7.0.0",
+    "nyc": "^15.0.0",
     "wu": "^2.1.0",
-    "yargs": "^15.0.2"
+    "yargs": "^15.1.0"
   }
 }
