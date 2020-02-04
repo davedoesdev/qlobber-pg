@@ -195,7 +195,7 @@ class QlobberPG extends EventEmitter {
 
         this._queue.push(cb => {
             if (this._chkstop()) {
-                return;
+                return cb();
             }
             this._client.connect(cb);
         }, emit_error);
@@ -220,14 +220,14 @@ class QlobberPG extends EventEmitter {
 
         this._queue.push(cb => {
             if (this._chkstop()) {
-                return;
+                return cb();
             }
             this._client.query(escape('LISTEN new_message_%I', this._name), cb);
         }, close_and_emit_error);
 
         this._queue.push(cb => {
             if (this._chkstop()) {
-                return;
+                return cb();
             }
             this._expire();
             this._check();
@@ -247,10 +247,13 @@ class QlobberPG extends EventEmitter {
     _reset_last_ids(cb) {
         this._queue.push(cb => {
             if (this._chkstop()) {
-                return;
+                return cb();
             }
             this._client.query('SELECT DISTINCT ON (publisher) publisher, id FROM messages ORDER BY publisher, id DESC', cb);
         }, iferr(cb, r => {
+            if (this._chkstop()) {
+                return cb();
+            }
             this._last_ids = new Map();
             for (let row of r.rows) {
                 this._last_ids.set(row.publisher, row.id);
@@ -372,6 +375,27 @@ class QlobberPG extends EventEmitter {
             delete this._extra_matcher;
             //console.log("LAST_IDS BEFORE", this._name, this._last_ids);
             let last_ids = new Map();
+
+            let ended = false;
+            const end = err => {
+                this._client.removeListener('end', end);
+                if (this._chkstop() || ended) {
+                    return;
+                }
+                ended = true;
+                if (err) {
+                    return this.emit('error', err);
+                }
+                //console.log("LAST_IDS UPDATE", this._name, last_ids);
+                for (let [publisher, id] of last_ids) {
+                    this._last_ids.set(publisher, id);
+                }
+                //console.log("LAST_IDS AFTER", this._name, this._last_ids);
+                this._check_timeout = setTimeout(this._check.bind(this), this._check_delay);
+            };
+
+            this._client.on('end', end);
+
             pipeline(stream, new Writable({
                 objectMode: true,
                 write: (msg, encoding, cb) => {
@@ -385,20 +409,7 @@ class QlobberPG extends EventEmitter {
                     }
                     this._message(msg, deferred, extra_matcher, cb);
                 }
-            }), err => {
-                if (this._chkstop()) {
-                    return;
-                }
-                if (err) {
-                    return this.emit('error', err);
-                }
-                //console.log("LAST_IDS UPDATE", this._name, last_ids);
-                for (let [publisher, id] of last_ids) {
-                    this._last_ids.set(publisher, id);
-                }
-                //console.log("LAST_IDS AFTER", this._name, this._last_ids);
-                this._check_timeout = setTimeout(this._check.bind(this), this._check_delay);
-            });
+            }), end);
         });
     }
 

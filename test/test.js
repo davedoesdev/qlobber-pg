@@ -1489,7 +1489,6 @@ function test(gopts) {
                             prev_stream = null;
                         }
 
-
                         stream.on('end', function () {
                             --in_call;
                             cb(null, (count === 26) && (in_call === 0) ? done : null);
