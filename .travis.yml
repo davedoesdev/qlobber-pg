@@ -15,6 +15,8 @@ before_install:
   - sudo apt-get update
   - sudo apt-get --yes remove postgresql\*
   - sudo apt-get install -y postgresql-12 postgresql-client-12 socat
+  - sudo cat /etc/postgresql/12/main/pg_hba.conf
+  - ls -al /var/run/postgresql
   - sudo cp /etc/postgresql/{9.6,12}/main/pg_hba.conf
   - sudo cat /etc/postgresql/12/main/pg_hba.conf
   - ls -al /var/run/postgresql
