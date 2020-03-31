@@ -25,6 +25,7 @@ before_install:
   - ssh-keyscan -t rsa localhost >> ~/.ssh/known_hosts
   - echo PATH=\"$(dirname "$(which python)"):\$PATH\" > ~/.bashrc.new
   - echo export PGUSER=postgres >> ~/.bashrc.new
+  - echo export PGPORT=5433 >> ~/.bashrc.new
   - echo . ~/.nvm/nvm.sh >> ~/.bashrc.new
   - cat ~/.bashrc >> ~/.bashrc.new
   - mv ~/.bashrc.new ~/.bashrc
