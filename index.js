@@ -441,6 +441,10 @@ class QlobberPG extends EventEmitter {
         return this._do_dedup ? handlers.size : handlers.length;
     }
 
+    _copy(handlers) {
+        return this._do_dedup ? new Set(handlers) : Array.from(handlers);
+    }
+
     _call_handlers2(handlers, info, cb) {
         let called = false;
         let done_err = null;
@@ -636,8 +640,8 @@ class QlobberPG extends EventEmitter {
     }
 
     _handle_message(payload, cb) {
-        const handlers = payload.has_extra_handlers ?
-            payload.extra_handlers : this._matcher.match(payload.topic);
+        const handlers = this._copy(payload.has_extra_handlers ?
+            payload.extra_handlers : this._matcher.match(payload.topic));
 
         this._filter(payload, handlers, (err, ready, handlers) => {
             this._warning(err);
@@ -680,6 +684,7 @@ class QlobberPG extends EventEmitter {
                 has_extra_handlers = true;
             } else {
                 // Add previous handlers to new ones
+                extra_handlers = this._copy(extra_handlers)
                 const handlers = this._matcher.match(payload.topic);
                 for (let h of prev_extra_handlers) {
                     if (this._do_dedup) {
@@ -694,6 +699,8 @@ class QlobberPG extends EventEmitter {
             }
             extra_matcher._extra_handlers.delete(payload.id);
             extra_matcher._matcher_markers.delete(payload.id);
+        } else {
+            extra_handlers = this._copy(extra_handlers);
         }
         // We'll call handlers for existing message
         payload.extra_handlers = extra_handlers;

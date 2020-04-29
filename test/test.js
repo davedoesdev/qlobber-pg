@@ -478,6 +478,32 @@ function test(gopts) {
             }));
         });
 
+        it('should not allow filters to modify qlobber matches', function (done) {
+            let count = 0;
+
+            function handler(data, info, cb) {
+                expect(count).to.equal(2);
+                cb(null, done);
+            }
+
+            after_each(iferr(done, () => {
+                before_each(iferr(done, () => {
+                    qpg.subscribe('foo', handler, iferr(done, () => {
+                        qpg.publish('foo', 'bar', iferr(done, () => {}))
+                    }));
+                }), {
+                    filter: function (info, handlers, cb) {
+                        expect(info.topic).to.equal('foo');
+                        if (++count === 1) {
+                            handlers.delete(handler);
+                            return cb(null, false);
+                        }
+                        cb(null, true, handlers);
+                    }
+                });
+            }));
+        });
+
         it('should be able to set filter by property', function (done) {
             function handler1() {
                 done(new Error('should not be called'));
@@ -2183,20 +2209,20 @@ function test(gopts) {
         });
 
         it('should be able to unsubscribe while message being processed', function (done) {
-            const orig_num_handlers = qpg._num_handlers;
+            const orig_copy = qpg._copy;
 
             function handler() {
                 done(new Error('should not be called'));
             }
 
-            qpg._num_handlers = function (...args) {
-                qpg._num_handlers = orig_num_handlers;
+            qpg._copy = function (...args) {
+                qpg._copy = orig_copy;
                 
                 qpg.unsubscribe('foo', handler, iferr(done, () => {
                     setImmediate(done);
                 }));
 
-                return orig_num_handlers.apply(this, args);
+                return orig_copy.apply(this, args);
             };
 
             qpg.subscribe('foo', handler, iferr(done, () => {
