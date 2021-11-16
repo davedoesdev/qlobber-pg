@@ -489,7 +489,7 @@ function test(gopts) {
             after_each(iferr(done, () => {
                 before_each(iferr(done, () => {
                     qpg.subscribe('foo', handler, iferr(done, () => {
-                        qpg.publish('foo', 'bar', iferr(done, () => {}))
+                        qpg.publish('foo', 'bar', iferr(done, () => {}));
                     }));
                 }), {
                     filter: function (info, handlers, cb) {
@@ -1862,29 +1862,34 @@ function test(gopts) {
                 } else {
                     let ended = false;
                     let closed = false;
+                    let called = false;
                     let msg;
+
+                    function check() {
+                        if (ended && closed && called && msg) {
+                            expect(msg).to.equal('dummy');
+                            qpg.publish('foo', { single: true }, iferr(done, () => {})).end('bar');
+                        }
+                    }
 
                     stream.on('end', function () {
                         ended = true;
+                        check();
                     });
 
                     stream.on('close', function () {
                         closed = true;
+                        check();
                     });
 
                     stream.on('error', function (err) {
                         msg = err.message;
+                        check();
                     });
 
                     cb(new Error('dummy'), iferr(done, () => {
-                        // We're in a nextTick here so close has been emitted
-                        expect(closed).to.be.true;
-                        expect(msg).to.equal('dummy');
-                        process.nextTick(function () {
-                            // end emitted in another nextTick
-                            expect(ended).to.be.true;
-                            qpg.publish('foo', { single: true }, iferr(done, () => {})).end('bar');
-                        });
+                        called = true;
+                        check();
                     }));
                 }
             }

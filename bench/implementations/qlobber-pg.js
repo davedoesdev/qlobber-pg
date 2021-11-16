@@ -33,9 +33,6 @@ if (argv.remote) {
     argv.queues = argv.remote.length;
 }
 
-// b doesn't pass down env and node-postgres defaults user to $USERNAME
-config.db.user = os.userInfo().username;
-
 let queues;
 
 before((times, done) => {

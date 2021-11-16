@@ -1,0 +1,87 @@
+name: ci
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+  strategy:
+    matrix:
+      node-version: [12, 14, 16]
+      target: [test, test-multi, test-remote, coverage]
+
+    services:
+      postgres:
+        image: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      NODE_CONFIG: '{"db": {"host": "localhost"}}'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Update APT
+        run: sudo apt update
+
+      - name: Install OS dependencies
+        run: sudo apt install socat
+
+      - name: Use Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Setup SSH
+        run: |
+          ssh-keygen -t rsa -f ~/.ssh/id_rsa -N ''
+          cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
+          ssh-keyscan -t rsa localhost >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/*
+          chmod 700 ~/.ssh
+          chmod 755 ~/
+
+      - name: Check version
+        run: |
+          test "$(node --version | cut -d . -f 1)" = "v${{ matrix.node-version }}"
+          echo "PATH=\"$(dirname "$(which node)"):\$PATH\"" > ~/.bashrc.new
+          cat ~/.bashrc >> ~/.bashrc.new
+          mv ~/.bashrc.new ~/.bashrc
+          node_ver="$(ssh localhost node --version)"
+          echo "Node $node_ver"
+          test "$(echo "$node_ver" | cut -d . -f 1)" = "v${{ matrix.node-version }}"
+
+      - name: Install packages
+        run: npm install
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Create database
+        run: psql -c 'create database "qlobber-pg";'
+
+      - name: Apply migrations
+        run: npm run migrate up
+
+      - name: Run target
+        run: npm run ${{ matrix.target }}
+
+      - name: Coveralls
+        if: matrix.target == "coverage"
+        uses: coverallsapp/github-action@master
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+

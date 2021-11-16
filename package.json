@@ -21,8 +21,7 @@
     "migrate": "node-pg-migrate",
     "lint": "eslint *.js migrations/*.js bench/*.js bench/*/*.js bench/*/*/*.js && eslint -c .eslintrc.test.json test/*.js test/fixtures/*.js",
     "test": "mocha --bail",
-    "coverage": "nyc npm test && nyc report -r lcov && nyc check-coverage --statements 90 --branches 90 --functions 90 --lines 90",
-    "ci-coverage": "npm run coverage && cat coverage/lcov.info | coveralls",
+    "coverage": "c8 npm test && c8 report -r lcov && c8 check-coverage --statements 90 --branches 90 --functions 90 --lines 90",
     "test-multi": "mocha --bail test/rabbitmq.js --multi",
     "test-remote": "mocha --bail test/rabbitmq.js --remote",
     "docs": "documentation build index.js -f html -o docs",
@@ -43,25 +42,24 @@
     "node": ">= 12"
   },
   "dependencies": {
-    "async": "^3.2.0",
+    "async": "^3.2.2",
     "iferr": "^1.0.2",
-    "node-pg-migrate": "^5.5.0",
-    "pg": "^8.3.0",
+    "node-pg-migrate": "^6.0.0",
+    "pg": "^8.7.1",
     "pg-escape": "^0.2.0",
-    "pg-query-stream": "^3.2.0",
-    "qlobber": "^5.0.1"
+    "pg-query-stream": "^4.2.1",
+    "qlobber": "^6.0.0"
   },
   "devDependencies": {
     "b": "git://github.com/davedoesdev/b.git",
-    "chai": "^4.2.0",
-    "config": "^3.3.1",
-    "coveralls": "^3.1.0",
-    "cp-remote": "^0.2.3",
-    "documentation": "^13.0.2",
-    "eslint": "^7.7.0",
-    "mocha": "^8.1.1",
-    "nyc": "^15.1.0",
+    "c8": "^7.10.0",
+    "chai": "^4.3.4",
+    "config": "^3.3.6",
+    "cp-remote": "^0.2.6",
+    "documentation": "documentationjs/documentation",
+    "eslint": "^8.2.0",
+    "mocha": "^9.1.3",
     "wu": "^2.1.0",
-    "yargs": "^15.4.1"
+    "yargs": "^17.2.1"
   }
 }

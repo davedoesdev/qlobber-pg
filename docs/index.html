@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset='utf-8'>
-  <title>qlobber-pg 2.0.1 | Documentation</title>
+  <title>qlobber-pg 2.0.6 | Documentation</title>
   <meta name='description' content='PostgreSQL-based pub-sub and workqueues. Supports AMQP-like wildcard topics.'>
   <meta name='viewport' content='width=device-width,initial-scale=1'>
   <link href='assets/bass.css' rel='stylesheet'>
@@ -15,11 +15,14 @@
       <div id='split-left' class='overflow-auto fs0 height-viewport-100'>
         <div class='py1 px2'>
           <h3 class='mb0 no-anchor'>qlobber-pg</h3>
-          <div class='mb1'><code>2.0.1</code></div>
+          <div class='mb1'><code>2.0.6</code></div>
           <input
             placeholder='Filter'
             id='filter-input'
             class='col12 block input'
+            spellcheck='false'
+            autocapitalize='off'
+            autocorrect='off'
             type='text' />
           <div id='toc'>
             <ul class='list-reset h5 py1-ul'>
@@ -421,8 +424,8 @@ property of the <code>QlobberPG</code> object and can be modified at any time.</
     (default <code>100</code>)
   </td>
   <td class='break-word'><span>Passed to 
-<a href="https://github.com/brianc/node-pg-query-stream%5B%60node-pg-query-stream%60">https://github.com/brianc/node-pg-query-stream[<code>node-pg-query-stream</code></a>
-]
+<a href="https://github.com/brianc/node-pg-query-stream%5B%60node-pg-query-stream%60%5D">https://github.com/brianc/node-pg-query-stream[`node-pg-query-stream`]</a>
+
 and specifies how many messages to retrieve from the database at a time
 (using a cursor).
 </span></td>
@@ -436,6 +439,8 @@ and specifies how many messages to retrieve from the database at a time
         </div>
       
     </div>
+  
+
   
 
   
@@ -495,6 +500,8 @@ periodic check to occur.</p>
   
 
   
+
+  
 </section>
 
       </div>
@@ -523,6 +530,8 @@ periodic check to occur.</p>
   
   
   
+  
+
   
 
   
@@ -607,6 +616,8 @@ database has stopped. Alternatively, you can listen for the
   
 
   
+
+  
 </section>
 
       </div>
@@ -650,6 +661,8 @@ database has stopped. Alternatively, you can listen for the
         </div>
       
     </div>
+  
+
   
 
   
@@ -772,9 +785,8 @@ each message. You should take this into account when reading from the
 stream. The stream can be piped into multiple
 <a href="http://nodejs.org/api/stream.html#stream_class_stream_writable">Writable</a>
 streams but bear in mind it will go at the rate of the slowest one.</li>
-<li>
-<p><strong><code>info</code></strong> (<code>Object</code>) Metadata for the message, with the following
-properties:</p>
+<li><strong><code>info</code></strong> (<code>Object</code>) Metadata for the message, with the following
+properties:
 <ul>
 <li><strong><code>topic</code></strong> (<code>String</code>)  Topic the message was published with.</li>
 <li><strong><code>expires</code></strong> (<code>Integer</code>) When the message expires (number of
@@ -786,19 +798,17 @@ most one subscriber (across all <code>QlobberPG</code> instances).</li>
 published the message.</li>
 </ul>
 </li>
-<li>
-<p><strong><code>done</code></strong> (<code>Function</code>) Function to call one you've handled the
+<li><strong><code>done</code></strong> (<code>Function</code>) Function to call one you've handled the
 message. Note that calling this function is only mandatory if
 <code>info.single === true</code>, in order to delete and unlock the message
-row in the database table. <code>done</code> takes two arguments:</p>
+row in the database table. <code>done</code> takes two arguments:
 <ul>
 <li><strong><code>err</code></strong> (<code>Object</code>) If an error occurred then pass details of the
 error, otherwise pass <code>null</code> or <code>undefined</code>.</li>
-<li>
-<p><strong><code>finish</code></strong> (<code>Function</code>) Optional function to call once the message
+<li><strong><code>finish</code></strong> (<code>Function</code>) Optional function to call once the message
 has been deleted and unlocked, in the case of
 <code>info.single === true</code>, or straight away otherwise. It will be
-passed the following argument:</p>
+passed the following argument:
 <ul>
 <li><strong><code>err</code></strong> (<code>Object</code>) If an error occurred then details of the
 error, otherwise <code>null</code>.</li>
@@ -876,6 +886,8 @@ otherwise <code>null</code>.</li>
         </div>
       
     </div>
+  
+
   
 
   
@@ -993,6 +1005,8 @@ otherwise <code>null</code>.</li>
         </div>
       
     </div>
+  
+
   
 
   
@@ -1211,6 +1225,8 @@ if no
   
 
   
+
+  
 </section>
 
       </div>
@@ -1255,6 +1271,8 @@ QlobberPG may stop querying the database for messages.</p>
   
   
   
+  
+
   
 
   
@@ -1322,6 +1340,8 @@ subscribed to.</p>
   
 
   
+
+  
 </section>
 
       </div>
@@ -1351,6 +1371,8 @@ and access to the database has stopped.</p>
   
   
   
+  
+
   
 
   
@@ -1406,6 +1428,8 @@ QlobberPG will continue to query the database for messages.</p>
   
   
   
+  
+
   
 
   

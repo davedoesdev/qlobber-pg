@@ -219,7 +219,7 @@ npm run lint
 npm run coverage
 ----
 
-http://gotwarlost.github.io/istanbul/[Istanbul] results are available
+https://github.com/bcoe/c8[c8] results are available
 http://rawgit.davedoesdev.com/davedoesdev/qlobber-pg/master/coverage/lcov-report/index.html[here].
 
 Coveralls page is https://coveralls.io/r/davedoesdev/qlobber-pg[here].

@@ -511,12 +511,12 @@ class QlobberPG extends EventEmitter {
                     if (cb) {
                         process.nextTick(cb, err);
                     }
-
                     // From Node 10, 'readable' is not emitted after destroyed.
-                    // 'end' is emitted though (at least for now); if this
-                    // changes then we could emit 'end' here instead.
+                    // From Node 16, 'end' isn't emitted either.
+                    // However, we have code which relies on the stream ending
+                    // so fix this up by emitting 'end' here.
                     if (stream) {
-                        stream.emit('readable');
+                        stream.emit('end');
                     }
                     done(err);
                 };
@@ -684,7 +684,7 @@ class QlobberPG extends EventEmitter {
                 has_extra_handlers = true;
             } else {
                 // Add previous handlers to new ones
-                extra_handlers = this._copy(extra_handlers)
+                extra_handlers = this._copy(extra_handlers);
                 const handlers = this._matcher.match(payload.topic);
                 for (let h of prev_extra_handlers) {
                     if (this._do_dedup) {
