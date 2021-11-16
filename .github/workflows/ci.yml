@@ -6,10 +6,10 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
-  strategy:
-    matrix:
-      node-version: [12, 14, 16]
-      target: [test, test-multi, test-remote, coverage]
+    strategy:
+      matrix:
+        node-version: [12, 14, 16]
+        target: [test, test-multi, test-remote, coverage]
 
     services:
       postgres:
@@ -84,4 +84,3 @@ jobs:
         uses: coverallsapp/github-action@master
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-
