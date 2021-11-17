@@ -80,7 +80,7 @@ jobs:
         run: npm run ${{ matrix.target }}
 
       - name: Coveralls
-        if: matrix.target == "coverage"
+        if: matrix.target == 'coverage'
         uses: coverallsapp/github-action@master
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
