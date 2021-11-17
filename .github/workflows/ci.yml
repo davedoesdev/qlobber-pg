@@ -54,10 +54,12 @@ jobs:
           echo "PGUSER=$PGUSER" >> ~/.ssh/environment
           echo "PGPASSWORD=$PGPASSWORD" >> ~/.ssh/environment
           echo "NODE_CONFIG=$NODE_CONFIG" >> ~/.ssh/environment
+          cat ~/.ssh/environment
           chmod 600 ~/.ssh/*
           chmod 700 ~/.ssh
           chmod 755 ~/
           echo PermitUserEnvironment=on | sudo tee -a /etc/ssh/sshd_config
+          ls /etc/ssh/sshd_config.d
           sudo systemctl restart ssh.service
           ssh localhost 'echo $PGHOST'
 
