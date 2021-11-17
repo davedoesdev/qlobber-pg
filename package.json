@@ -19,7 +19,7 @@
   "main": "index.js",
   "scripts": {
     "migrate": "node-pg-migrate",
-    "lint": "eslint *.js migrations/*.js bench/*.js bench/*/*.js bench/*/*/*.js && eslint -c .eslintrc.test.json test/*.js test/fixtures/*.js",
+    "lint": "eslint *.js migrations/*.js 'bench/**/*.js' && eslint -c .eslintrc.test.json 'test/**/*.js'",
     "test": "mocha --bail",
     "coverage": "c8 npm test && c8 report -r lcov && c8 check-coverage --statements 90 --branches 90 --functions 90 --lines 90",
     "test-multi": "mocha --bail test/rabbitmq.js --multi",
