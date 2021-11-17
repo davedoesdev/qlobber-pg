@@ -50,9 +50,15 @@ jobs:
           ssh-keygen -t rsa -f ~/.ssh/id_rsa -N ''
           cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
           ssh-keyscan -t rsa localhost >> ~/.ssh/known_hosts
+          echo "PGHOST=$PGHOST" >> ~/.ssh/environment
+          echo "PGUSER=$PGUSER" >> ~/.ssh/environment
+          echo "PGPASSWORD=$PGPASSWORD" >> ~/.ssh/environment
+          echo "NODE_CONFIG=$NODE_CONFIG" >> ~/.ssh/environment
           chmod 600 ~/.ssh/*
           chmod 700 ~/.ssh
           chmod 755 ~/
+          echo PermitUserEnvironment=on | sudo tee -a /etc/ssh/sshd_config > /dev/null
+          sudo systemctl restart ssh.service
 
       - name: Check version
         run: |
