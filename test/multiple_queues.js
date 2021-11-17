@@ -15,7 +15,7 @@ function sum(buf) {
 }
 
 describe('multiple queues', function () {
-    const timeout = 60 * 60 * 1000;
+    const timeout = 20 * 60 * 1000;
     this.timeout(timeout);
 
     let interval_handle;
@@ -169,7 +169,7 @@ describe('multiple queues', function () {
 
     publish_to_queues3(1, 200 * 1024);
 
-    if (process.env.NYC_CWD) {
+    if (process.env.NODE_V8_COVERAGE) {
         publish_to_queues3(5, 100 * 1024);
     } else {
         publish_to_queues3(10, 100 * 1024);

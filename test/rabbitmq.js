@@ -480,7 +480,7 @@ describe('rabbit', function () {
         rabbitmq4('single-process', QlobberPG, 1);
         rabbitmq4('single-process', QlobberPG, 2);
 
-        if (!process.env.NYC_CWD && !process.env.APPVEYOR) {
+        if (!process.env.NODE_V8_COVERAGE && !process.env.APPVEYOR) {
             rabbitmq4('single-process', QlobberPG, 5);
         }
     }

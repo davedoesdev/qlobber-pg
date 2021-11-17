@@ -25,6 +25,7 @@ jobs:
           - 5432:5432
 
     env:
+      CI: true
       PGHOST: localhost
       PGUSER: postgres
       PGPASSWORD: postgres
