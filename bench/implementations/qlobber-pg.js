@@ -2,7 +2,6 @@
 'use strict';
 const child_process = require('child_process');
 const path = require('path');
-const os = require('os');
 const cp_remote = require('cp-remote');
 const async = require('async');
 const config = require('config');

@@ -1865,12 +1865,12 @@ function test(gopts) {
                     let called = false;
                     let msg;
 
-                    function check() {
+                    const check = () => {
                         if (ended && closed && called && msg) {
                             expect(msg).to.equal('dummy');
                             qpg.publish('foo', { single: true }, iferr(done, () => {})).end('bar');
                         }
-                    }
+                    };
 
                     stream.on('end', function () {
                         ended = true;
