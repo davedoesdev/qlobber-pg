@@ -15,7 +15,7 @@ function sum(buf) {
 }
 
 describe('multiple queues', function () {
-    const timeout = 20 * 60 * 1000;
+    const timeout = 30 * 60 * 1000;
     this.timeout(timeout);
 
     let interval_handle;
