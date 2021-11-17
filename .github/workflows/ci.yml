@@ -62,6 +62,7 @@ jobs:
           ls /etc/ssh/sshd_config.d
           sudo systemctl restart ssh.service
           ssh localhost 'echo $PGHOST'
+          echo Setup SSH done
 
       - name: Check version
         run: |
