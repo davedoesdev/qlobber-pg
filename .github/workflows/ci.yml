@@ -59,7 +59,7 @@ jobs:
           chmod 700 ~/.ssh
           chmod 755 ~/
           echo PermitUserEnvironment=on | sudo tee -a /etc/ssh/sshd_config
-          ls /etc/ssh/sshd_config.d
+          cat /etc/ssh/sshd_config.d/*
           sudo systemctl restart ssh.service
           ssh localhost 'echo $PGHOST'
           echo Setup SSH done
