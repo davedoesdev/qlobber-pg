@@ -31,12 +31,12 @@ jobs:
 
       - name: Check PostgreSQL version
         run: |
-          sudo systemctl enable postgresql
-          sudo systemctl start postgresql
-          sudo systemctl status postgresql
           echo "local all postgres peer map=mymap" | sudo tee -a /etc/postgresql/${{ matrix.postgres-version }}/main/pg_hba.conf
           echo "mymap postgres postgres" | sudo tee -a /etc/postgresql/${{ matrix.postgres-version }}/main/pg_ident.conf
           echo "mymap $USER postgres" | sudo tee -a /etc/postgresql/${{ matrix.postgres-version }}/main/pg_ident.conf
+          sudo systemctl enable postgresql
+          sudo systemctl start postgresql
+          sudo systemctl status postgresql
           client_ver="$(psql --version)"
           echo "$client_ver"
           server_ver="$(psql -c 'select version();')"
