@@ -25,6 +25,7 @@ jobs:
 
       - name: Install OS dependencies
         run: |
+          apt list --installed postgresql
           sudo apt remove postgresql postgresql-client
           sudo apt install socat postgresql-${{ matrix.postgres-version }} postgresql-client-${{ matrix.postgres-version }}
 
