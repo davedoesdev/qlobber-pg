@@ -25,7 +25,7 @@ jobs:
 
       - name: Install OS dependencies
         run: |
-          sudo apt purge 'postgresql*'
+          sudo apt remove 'postgresql*'
           sudo apt install socat postgresql-${{ matrix.postgres-version }} postgresql-client-${{ matrix.postgres-version }}
 
       - name: Check PostgreSQL version
