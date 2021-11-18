@@ -28,14 +28,14 @@ jobs:
       - name: Check PostgreSQL version
         run: |
           client_ver="$(psql --version | gawk '{printf("%d", $3)}')"
-          server_ver="$(psql -c 'select version();' | gawk '/PostgreSQL/{printf("%d", $2)}')"
-          test "$client_ver" = "$server_ver"
-          echo "pg version: $server_ver"
-          sudo sed -i 's/peer/\0 map=mymap/' "/etc/postgresql/$server_ver/main/pg_hba.conf"
-          echo "mymap $USER postgres" | sudo tee -a "/etc/postgresql/$server_ver/main/pg_ident.conf"
+          sudo sed -i 's/peer/\0 map=mymap/' "/etc/postgresql/$client_ver/main/pg_hba.conf"
+          echo "mymap $USER postgres" | sudo tee -a "/etc/postgresql/$client_ver/main/pg_ident.conf"
           sudo systemctl enable postgresql
           sudo systemctl start postgresql
           sudo systemctl status postgresql
+          server_ver="$(psql -c 'select version();' | gawk '/PostgreSQL/{printf("%d", $2)}')"
+          test "$server_ver" = "$client_ver"
+          echo "pg version: $client_ver"
 
       - name: Use Node.js
         uses: actions/setup-node@v2
