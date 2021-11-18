@@ -72,7 +72,7 @@ describe('multiple queues', function () {
                             ++count_multi;
                         }
 
-                        //console.log('MSG', count_single, num_single, count_multi, num_multi * num_queues);
+                        console.log('MSG', count_single, num_single, count_multi, num_multi * num_queues);
 
                         if (the_qpgs &&
                             (count_single === num_single) &&
