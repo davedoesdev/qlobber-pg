@@ -10,7 +10,6 @@ jobs:
       matrix:
         node-version: [12, 14, 16]
         target: [test, test-multi, test-remote, coverage]
-        postgres-version: [12, 14]
 
     env:
       CI: true
@@ -28,26 +27,15 @@ jobs:
 
       - name: Check PostgreSQL version
         run: |
-          client_ver="$(psql --version)"
-          echo "current client version: $client_ver"
-          if [ "$(echo "$client_ver" | gawk '{printf("%d", $3)}')" != ${{ matrix.postgres-version }} ]
-          then
-            sudo apt purge 'postgresql*'
-            sudo apt install postgresql-${{ matrix.postgres-version }} postgresql-client-${{ matrix.postgres-version }} postgresql-common-${{ matrix.postgres-version }}
-          fi
-          apt list --installed postgresql
-          sudo sed -i 's/peer/\0 map=mymap/' /etc/postgresql/${{ matrix.postgres-version }}/main/pg_hba.conf
-          echo "mymap $USER postgres" | sudo tee -a /etc/postgresql/${{ matrix.postgres-version }}/main/pg_ident.conf
-          sudo cat /etc/postgresql/${{ matrix.postgres-version }}/main/{pg_hba,pg_ident}.conf
+          client_ver="$(psql --version | gawk '{printf("%d", $3)}')"
+          server_ver="$(psql -c 'select version();' | gawk '/PostgreSQL/{printf("%d", $2)}')"
+          test "$client_ver" = "$server_ver"
+          echo "pg version: $server_ver"
+          sudo sed -i 's/peer/\0 map=mymap/' "/etc/postgresql/$server_ver/main/pg_hba.conf"
+          echo "mymap $USER postgres" | sudo tee -a "/etc/postgresql/$server_ver/main/pg_ident.conf"
           sudo systemctl enable postgresql
           sudo systemctl start postgresql
           sudo systemctl status postgresql
-          client_ver="$(psql --version)"
-          echo "new client version: $client_ver"
-          server_ver="$(psql -c 'select version();')"
-          echo "new server version: $server_ver"
-          test "$(echo "$client_ver" | gawk '{printf("%d", $3)}')" = ${{ matrix.postgres-version }}
-          test "$(echo "$server_ver" | gawk '/PostgreSQL/{printf("%d", $2)}')" = ${{ matrix.postgres-version }}
 
       - name: Use Node.js
         uses: actions/setup-node@v2
