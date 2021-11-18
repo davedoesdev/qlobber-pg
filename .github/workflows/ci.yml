@@ -10,19 +10,7 @@ jobs:
       matrix:
         node-version: [12, 14, 16]
         target: [test, test-multi, test-remote, coverage]
-
-    services:
-      postgres:
-        image: postgres
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        env:
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
+        postgres-version: [14]
 
     env:
       CI: true
@@ -39,7 +27,16 @@ jobs:
         run: sudo apt update
 
       - name: Install OS dependencies
-        run: sudo apt install socat
+        run: sudo apt install socat postgresql-${{ matrix.postgres-version}} postgresql-client-${{ matrix.postgres-version }}
+
+      - name: Check PostgreSQL version
+        run: |
+          client_ver="$(psql --version)"
+          echo "$client_ver"
+          server_ver="$(psql -c 'select version();')"
+          echo "$server_ver"
+          test "$(echo "$client_ver" | gawk '{printf("%d", $3)})'" = ${{ matrix.postgres-version }}
+          test "$(echo "$server_ver" | gawk '{/PostgreSQL/{printf("%d", $2)}')" = ${{ matrix.postres-version }}
 
       - name: Use Node.js
         uses: actions/setup-node@v2
@@ -80,10 +77,7 @@ jobs:
         run: npm run lint
 
       - name: Create database
-        run: |
-          psql --version
-          psql -c 'select version();'
-          psql -c 'create database "qlobber-pg";'
+        run: psql -c 'create database "qlobber-pg";'
 
       - name: Apply migrations
         run: npm run migrate up
