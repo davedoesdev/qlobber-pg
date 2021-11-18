@@ -5,11 +5,10 @@ environment:
   PGUSER: postgres
   PGPASSWORD: Password12!
   POSTGRES_PATH: C:\Program Files\PostgreSQL\13
+  nodejs_version: 16
   matrix:
-    - nodejs_version: "16"
-      TARGET: test
-    - nodejs_version: "16"
-      TARGET: test-multi
+    - TARGET: test
+    - TARGET: test-multi
 
 services:
   - postgresql13
