@@ -14,9 +14,7 @@ jobs:
 
     env:
       CI: true
-      PGHOST: localhost
       PGUSER: postgres
-      PGPASSWORD: postgres
       NODE_CONFIG: '{"db": {"host": "localhost"}}'
 
     steps:
@@ -32,7 +30,6 @@ jobs:
       - name: Check PostgreSQL version
         run: |
           sudo sed -i 's/peer/\0 map=mymap/' /etc/postgresql/${{ matrix.postgres-version }}/main/pg_hba.conf
-          echo "mymap postgres postgres" | sudo tee -a /etc/postgresql/${{ matrix.postgres-version }}/main/pg_ident.conf
           echo "mymap $USER postgres" | sudo tee -a /etc/postgresql/${{ matrix.postgres-version }}/main/pg_ident.conf
           sudo cat /etc/postgresql/${{ matrix.postgres-version }}/main/{pg_hba,pg_ident}.conf
           sudo systemctl enable postgresql
