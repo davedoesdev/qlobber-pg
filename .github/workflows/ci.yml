@@ -10,7 +10,7 @@ jobs:
       matrix:
         node-version: [12, 14, 16]
         target: [test, test-multi, test-remote, coverage]
-        postgres-version: [14]
+        postgres-version: [12, 14]
 
     env:
       CI: true
