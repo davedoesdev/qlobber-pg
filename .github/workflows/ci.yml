@@ -40,7 +40,7 @@ jobs:
           server_ver="$(psql -c 'select version();')"
           echo "$server_ver"
           test "$(echo "$client_ver" | gawk '{printf("%d", $3)}')" = ${{ matrix.postgres-version }}
-          test "$(echo "$server_ver" | gawk '/PostgreSQL/{printf("%d", $2)}')" = ${{ matrix.postres-version }}
+          test "$(echo "$server_ver" | gawk '/PostgreSQL/{printf("%d", $2)}')" = ${{ matrix.postgres-version }}
 
       - name: Use Node.js
         uses: actions/setup-node@v2
