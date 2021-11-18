@@ -80,7 +80,7 @@ jobs:
         run: npm run lint
 
       - name: Create database
-        run:
+        run: |
           psql --version
           psql -c 'select version();'
           psql -c 'create database "qlobber-pg";'

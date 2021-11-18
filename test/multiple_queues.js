@@ -162,19 +162,19 @@ describe('multiple queues', function () {
     }
 
     function publish_to_queues3(num_queues, max_message_size) {
-        publish_to_queues2(num_queues, 50, max_message_size);
-        publish_to_queues2(num_queues, 500, max_message_size);
+        //publish_to_queues2(num_queues, 50, max_message_size);
+        //publish_to_queues2(num_queues, 500, max_message_size);
         publish_to_queues2(num_queues, 5000, max_message_size);
     }
 
-    publish_to_queues3(1, 200 * 1024);
+    //publish_to_queues3(1, 200 * 1024);
 
     if (process.env.NODE_V8_COVERAGE) {
         publish_to_queues3(5, 100 * 1024);
     } else {
         publish_to_queues3(10, 100 * 1024);
         if (!process.env.CI) {
-            publish_to_queues3(50, 20 * 1024);
+            //publish_to_queues3(50, 20 * 1024);
         }
     }
 });
