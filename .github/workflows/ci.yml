@@ -80,7 +80,10 @@ jobs:
         run: npm run lint
 
       - name: Create database
-        run: psql -c 'create database "qlobber-pg";'
+        run:
+          psql --version
+          psql -c 'select version();'
+          psql -c 'create database "qlobber-pg";'
 
       - name: Apply migrations
         run: npm run migrate up
