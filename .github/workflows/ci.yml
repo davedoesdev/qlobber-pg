@@ -15,7 +15,6 @@ jobs:
     env:
       CI: true
       PGUSER: postgres
-      NODE_CONFIG: '{"db": {"host": "localhost"}}'
 
     steps:
       - name: Checkout
