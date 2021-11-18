@@ -33,8 +33,9 @@ jobs:
           if [ "$(echo "$client_ver" | gawk '{printf("%d", $3)}')" != ${{ matrix.postgres-version }} ]
           then
             sudo apt purge 'postgresql*'
-            sudo apt install socat postgresql-${{ matrix.postgres-version }} postgresql-client-${{ matrix.postgres-version }}
+            sudo apt install postgresql-${{ matrix.postgres-version }} postgresql-client-${{ matrix.postgres-version }} postgresql-common-${{ matrix.postgres-version }}
           fi
+          apt list --installed postgresql
           sudo sed -i 's/peer/\0 map=mymap/' /etc/postgresql/${{ matrix.postgres-version }}/main/pg_hba.conf
           echo "mymap $USER postgres" | sudo tee -a /etc/postgresql/${{ matrix.postgres-version }}/main/pg_ident.conf
           sudo cat /etc/postgresql/${{ matrix.postgres-version }}/main/{pg_hba,pg_ident}.conf
