@@ -31,6 +31,7 @@ jobs:
 
       - name: Check PostgreSQL version
         run: |
+          sudo systemctl status postgresql
           client_ver="$(psql --version)"
           echo "$client_ver"
           server_ver="$(psql -c 'select version();')"
