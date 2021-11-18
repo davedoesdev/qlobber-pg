@@ -32,6 +32,7 @@ jobs:
       - name: Check PostgreSQL version
         run: |
           sudo systemctl enable postgresql
+          sudo systemctl start postgresql
           sudo systemctl status postgresql
           client_ver="$(psql --version)"
           echo "$client_ver"
