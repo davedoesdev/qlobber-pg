@@ -4,14 +4,14 @@ environment:
   NODE_CONFIG: '{"db": {"host": "localhost"}}'
   PGUSER: postgres
   PGPASSWORD: Password12!
-  POSTGRES_PATH: C:\Program Files\PostgreSQL\13
+  POSTGRES_PATH: C:\Program Files\PostgreSQL\10
   nodejs_version: 16
   matrix:
     - TARGET: test
     - TARGET: test-multi
 
 services:
-  - postgresql13
+  - postgresql10
 
 install:
   - ps: Install-Product node $env:nodejs_version
