@@ -19,6 +19,7 @@ install:
   - npm install
 
 before_test:
+  - ps: Stop-Service docker
   - ps: Get-Process
   - set path=%postgres_path%\\bin;%path%
   - "psql -c \"create database \\\"qlobber-pg\\\";\""
