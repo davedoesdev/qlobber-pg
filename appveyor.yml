@@ -13,13 +13,16 @@ environment:
 services:
   - postgresql13
 
+init:
+  - ps: iex ((new-object net.webclient).DownloadString('https://raw.githubusercontent.com/appveyor/ci/master/scripts/enable-rdp.ps1'))
+  - ps: Stop-Service docker
+
 install:
   - ps: Install-Product node $env:nodejs_version
   - node --version
   - npm install
 
 before_test:
-  - ps: Stop-Service docker
   - ps: Get-Process
   - set path=%postgres_path%\\bin;%path%
   - "psql -c \"create database \\\"qlobber-pg\\\";\""
