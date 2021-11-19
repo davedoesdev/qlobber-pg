@@ -21,7 +21,6 @@ install:
 before_test:
   # stopping docker speeds things up
   - ps: Stop-Service -Name "*docker*"
-  - ps: Stop-Process -Name "*Docker*"
   - set path=%postgres_path%\\bin;%path%
   - "psql -c \"create database \\\"qlobber-pg\\\";\""
 
