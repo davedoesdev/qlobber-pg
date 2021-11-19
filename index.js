@@ -625,6 +625,7 @@ class QlobberPG extends EventEmitter {
                 return done(ex);
             }
             if (!deliver) {
+            console.log("NOT DELIVERED", info.id);
                 await lock_client.end();
                 return done();
             }
