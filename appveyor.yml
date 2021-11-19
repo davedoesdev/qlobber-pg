@@ -1,4 +1,4 @@
-image: Visual Studio 2022
+image: Visual Studio 2017
 
 environment:
   NODE_CONFIG: '{"db": {"host": "localhost"}}'
