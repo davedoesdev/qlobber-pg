@@ -164,7 +164,9 @@ describe('multiple queues', function () {
     function publish_to_queues3(num_queues, max_message_size) {
         publish_to_queues2(num_queues, 50, max_message_size);
         publish_to_queues2(num_queues, 500, max_message_size);
-        publish_to_queues2(num_queues, 5000, max_message_size);
+        if (!process.env.APPVEYOR) {
+            publish_to_queues2(num_queues, 5000, max_message_size);
+        }
     }
 
     publish_to_queues3(1, 200 * 1024);
