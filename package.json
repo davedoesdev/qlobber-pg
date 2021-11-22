@@ -1,7 +1,7 @@
 {
   "name": "qlobber-pg",
   "description": "PostgreSQL-based pub-sub and workqueues. Supports AMQP-like wildcard topics.",
-  "version": "2.0.7",
+  "version": "2.0.8",
   "homepage": "https://github.com/davedoesdev/qlobber-pg",
   "author": {
     "name": "David Halls",
@@ -24,7 +24,7 @@
     "coverage": "c8 npm test && c8 report -r lcov && c8 check-coverage --statements 90 --branches 90 --functions 90 --lines 90",
     "test-multi": "mocha --bail test/rabbitmq.js --multi",
     "test-remote": "mocha --bail test/rabbitmq.js --remote",
-    "docs": "documentation build index.js -f html -o docs",
+    "docs": "documentation build index.js -f html -o docs && asciidoc -b docbook -o - README.adoc | pandoc -f docbook -t gfm -o README.md",
     "_bench": "bench -c 1 -i bench/implementations/qlobber-pg.js --data",
     "bench": "node -e 'child_process.spawnSync(\"npm\", [\"run\", \"_bench\", \"--\", Buffer.from(JSON.stringify(process.argv.slice(1))).toString(\"hex\")], { stdio: \"inherit\" })' --"
   },
