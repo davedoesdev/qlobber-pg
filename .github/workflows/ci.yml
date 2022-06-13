@@ -8,7 +8,7 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [12, 14, 16]
+        node-version: [14, 16, 18]
         target: [test, test-multi, test-remote, coverage]
 
     env:
