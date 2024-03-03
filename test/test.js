@@ -40,7 +40,7 @@ function read_all(s, cb) {
 
 function test(gopts) {
     describe(`qlobber-pq options=${JSON.stringify(gopts)}`, function () {
-        let expect
+        let expect;
         before(async () => {
             ({ expect } = await import('chai'));
         });
