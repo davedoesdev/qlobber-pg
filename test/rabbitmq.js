@@ -6,7 +6,7 @@ const path = require('path');
 const { cpus } = require('os');
 const { times, each, eachLimit, queue, parallel } = require('async');
 const { QlobberPG } = require('..');
-const { expect } = require('chai');
+let expect;
 const { argv } = require('yargs');
 const cp_remote = require('cp-remote');
 const config = require('config');
@@ -462,6 +462,10 @@ function make_RemoteMPQPG(hosts) {
 }
 
 describe('rabbit', function () {
+    before(async () => {
+        ({ expect } = await import('chai'));
+    });
+
     if (argv.remote) {
         let hosts;
         if (argv.remote === true) {

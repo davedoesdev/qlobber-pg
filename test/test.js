@@ -5,7 +5,6 @@ const { randomBytes, createHash } = require('crypto');
 const { writeFile, createReadStream } = require('fs');
 const { parallel, timesSeries, eachSeries, each } = require('async');
 const { QlobberPG } = require('..');
-const { expect } = require('chai');
 const wu = require('wu');
 const config = require('config');
 const iferr = require('iferr');
@@ -41,6 +40,11 @@ function read_all(s, cb) {
 
 function test(gopts) {
     describe(`qlobber-pq options=${JSON.stringify(gopts)}`, function () {
+        let expect
+        before(async () => {
+            ({ expect } = await import('chai'));
+        });
+
         let qpg;
         let random_hash;
         let random_path = path.join(__dirname, 'fixtures', 'random');

@@ -2,7 +2,6 @@
 const { randomBytes } = require('crypto');
 const { timesSeries, each, timesLimit } = require('async');
 const { QlobberPG } = require('..');
-const { expect } = require('chai');
 const config = require('config');
 const iferr = require('iferr');
 
@@ -15,6 +14,11 @@ function sum(buf) {
 }
 
 describe('multiple queues', function () {
+    let expect;
+    before(async () => {
+        ({ expect } = await import('chai'));
+    });
+
     const timeout = 20 * 60 * 1000;
     this.timeout(timeout);
 

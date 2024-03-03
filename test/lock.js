@@ -1,10 +1,14 @@
 'use strict';
 const { Client } = require('pg');
-const { expect } = require('chai');
 const config = require('config');
 const iferr = require('iferr');
 
 describe('locking', function () {
+    let expect;
+    before(async () => {
+        ({ expect } = await import('chai'));
+    });
+
     it('should try lock', async function () {
         const client = new Client(config.db);
         await client.connect();
